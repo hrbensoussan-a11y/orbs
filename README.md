@@ -32,7 +32,7 @@ npm run dev                  # http://localhost:3000
 | Onglet | Route | État |
 | --- | --- | --- |
 | Menu (accueil) | `/accueil` | Maquette (données scolarité = équipe Pronote) |
-| Apprendre | `/apprendre` | **Fonctionnel** (Définitions + Questions) |
+| Apprendre | `/apprendre` | **Fonctionnel** (5 types de fiches) |
 | IA | `/ia` | En préparation (équipe IA) |
 | Journal | `/timeline` | **Fonctionnel** |
 | Agenda | `/agenda` | En préparation |
@@ -44,15 +44,21 @@ Moteur de révision **local** (localStorage, aucun compte/serveur), style DA.
 - Paquets par matière ; création en **collant un cours** (détection du
   séparateur) ou à la main ; favoris, édition, suppression.
 - Planificateur **répétition espacée SM-2** (grade/intervalles, file des dues).
-- Type **Définitions** : révision intelligente, recto-verso, QCM, écrire,
-  associer, vrai/faux, fiche. Type **Questions de cours** : interro + fiche.
+- **5 types de fiches**, chacun avec ses activités :
+  - **Définitions** : révision intelligente, recto-verso, QCM, écrire, associer,
+    vrai/faux, fiche.
+  - **Questions de cours** : interro + fiche.
+  - **Texte à trous** : clique les mots à cacher, puis remplis-les en contexte
+    (vérification tolérante, réussite ≥ 60 %).
+  - **Apprendre par cœur** : masquage progressif (0/25/50/75/100 %, déterministe),
+    et mode test (tout masqué, révélation ligne par ligne).
+  - **Remettre dans l'ordre** : réordonne les éléments mélangés.
+- Création en **collant un cours** ou éditeur dédié par type ; **import photo**
+  manuel (aperçu de la photo, tu recopies — aucun service externe).
 - **Progression** : XP, niveaux, série (streak), objectif quotidien, badges,
   maîtrise par carte/paquet. **Pomodoro** (concentration) nourrit la progression.
 - **Export / import** (fusion) et **partage** d'un paquet par code.
 - Vérification tolérante (accents/ponctuation/casse ignorés).
-
-À venir : types **Texte à trous**, **Apprendre par cœur**, **Remettre dans
-l'ordre** ; OCR photo → cartes.
 
 ## Le module Journal (fonctionnel)
 

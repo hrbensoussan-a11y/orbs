@@ -1,15 +1,25 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { X, Check, RotateCw, ArrowLeft, ArrowRight, Trophy, Award } from "lucide-react";
+import { X, Check, RotateCw, ArrowLeft, ArrowRight, Trophy, Award, ChevronUp, ChevronDown } from "lucide-react";
 import type { Card, Deck } from "@/lib/learn/types";
 import { grade, previewInterval, dueCards, shuffle } from "@/lib/learn/sm2";
 import { award, levelFromXp, recomputeBadges } from "@/lib/learn/progress";
-import { answerMatches } from "@/lib/learn/text";
+import { answerMatches, clozeParse, tokenizeWords, maskedSet } from "@/lib/learn/text";
 import type { LearnCtx } from "./ctx";
 import type { Mode } from "./StudyPicker";
 
-const PER_CARD: Mode[] = ["smart", "mcq", "write", "truefalse", "interro"];
+const PER_CARD: Mode[] = [
+  "smart",
+  "mcq",
+  "write",
+  "truefalse",
+  "interro",
+  "cloze",
+  "order",
+  "memorize_test",
+];
+const REVIEW_LIKE: Mode[] = ["smart", "interro", "cloze", "order", "memorize_test"];
 
 type Rewards = {
   correct: number;
@@ -33,7 +43,7 @@ export function StudySession({
   onDone: () => void;
 }) {
   const initialQueue = useMemo(() => {
-    if (mode === "smart" || mode === "interro") {
+    if (REVIEW_LIKE.includes(mode)) {
       const due = dueCards(deck);
       return due.length ? due : shuffle(deck.cards);
     }
@@ -96,7 +106,7 @@ export function StudySession({
     setWrong(0);
     setIndex(0);
     setQueue(
-      mode === "smart" || mode === "interro"
+      REVIEW_LIKE.includes(mode)
         ? (dueCards(deck).length ? dueCards(deck) : shuffle(deck.cards))
         : shuffle(deck.cards),
     );
@@ -106,6 +116,7 @@ export function StudySession({
   // --- Modes "activité entière" ---
   if (mode === "flashcards") return <Shell onClose={onDone}><Flashcards deck={deck} onFinish={(n) => finish(0, n)} /></Shell>;
   if (mode === "fiche") return <Shell onClose={onDone}><Fiche deck={deck} onFinish={(n) => finish(0, n)} /></Shell>;
+  if (mode === "memorize_learn") return <Shell onClose={onDone}><MemorizeLearn deck={deck} onFinish={(n) => finish(0, n)} /></Shell>;
   if (mode === "match")
     return (
       <Shell onClose={onDone}>
@@ -135,6 +146,9 @@ export function StudySession({
       {mode === "mcq" && <Mcq key={index} card={card} pool={pool} onAnswer={(ok) => answer(card, ok ? 4 : 1, ok)} />}
       {mode === "write" && <WriteCard key={index} card={card} onAnswer={(ok) => answer(card, ok ? 4 : 1, ok)} />}
       {mode === "truefalse" && <TrueFalse key={index} card={card} pool={pool} onAnswer={(ok) => answer(card, ok ? 4 : 1, ok)} />}
+      {mode === "cloze" && <ClozeCard key={index} card={card} onGrade={(q) => answer(card, q, q >= 3)} />}
+      {mode === "order" && <OrderCard key={index} card={card} onGrade={(q) => answer(card, q, q >= 3)} />}
+      {mode === "memorize_test" && <MemorizeTest key={index} card={card} onGrade={(q) => answer(card, q, q >= 3)} />}
     </Shell>
   );
 }
@@ -544,6 +558,273 @@ function MatchGame({
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Texte à trous ---------------- */
+function ClozeCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
+  const tokens = useMemo(() => clozeParse(card.t), [card]);
+  const blanks = useMemo(
+    () => tokens.filter((t) => t.type === "blank") as { type: "blank"; answer: string }[],
+    [tokens],
+  );
+  const [values, setValues] = useState<string[]>(() => blanks.map(() => ""));
+  const [result, setResult] = useState<null | { ok: boolean[]; q: number }>(null);
+
+  function verify() {
+    const ok = blanks.map((b, i) => answerMatches(values[i] || "", b.answer));
+    const correct = ok.filter(Boolean).length;
+    const ratio = blanks.length ? correct / blanks.length : 1;
+    setResult({ ok, q: ratio === 1 ? 5 : ratio >= 0.6 ? 4 : 1 });
+  }
+
+  let bi = -1;
+  return (
+    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+      <div className="text-xs font-medium text-ink-3">Complète le passage</div>
+      <p className="text-lg leading-loose">
+        {tokens.map((tk, i) => {
+          if (tk.type === "text") return <span key={i}>{tk.value}</span>;
+          bi += 1;
+          const j = bi;
+          const state = result ? (result.ok[j] ? "ok" : "bad") : "idle";
+          return (
+            <input
+              key={i}
+              value={values[j]}
+              disabled={!!result}
+              onChange={(e) => setValues((vs) => vs.map((x, k) => (k === j ? e.target.value : x)))}
+              style={{ width: `${Math.max(6, tk.answer.length + 2)}ch` }}
+              className={`inline-block mx-0.5 px-1 rounded-md border text-center ${
+                state === "ok"
+                  ? "border-[var(--green)] text-green-ink"
+                  : state === "bad"
+                    ? "border-[var(--coral)] text-coral"
+                    : "border-line bg-white/60"
+              }`}
+            />
+          );
+        })}
+      </p>
+      {result && result.q < 3 && (
+        <p className="text-sm">
+          <span className="text-coral">À revoir.</span> Réponses : {blanks.map((b) => b.answer).join(", ")}
+        </p>
+      )}
+      {result ? (
+        <button className="btn-primary mt-auto self-end" onClick={() => onGrade(result.q)}>
+          Suivant <ArrowRight size={16} aria-hidden />
+        </button>
+      ) : (
+        <button className="btn-primary mt-auto self-center px-8" onClick={verify}>
+          Vérifier
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Remettre dans l'ordre ---------------- */
+function shuffledDifferent(arr: string[]): string[] {
+  if (arr.length < 2) return arr.slice();
+  let s = arr.slice();
+  for (let t = 0; t < 20; t++) {
+    s = shuffle(arr);
+    if (!s.every((v, i) => v === arr[i])) break;
+  }
+  return s;
+}
+function OrderCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
+  const correct = useMemo(() => card.d.split("\n").map((s) => s.trim()).filter(Boolean), [card]);
+  const [arr, setArr] = useState<string[]>(() => shuffledDifferent(correct));
+  const [checked, setChecked] = useState(false);
+  const allRight = checked && arr.every((v, i) => v === correct[i]);
+
+  function move(i: number, dir: number) {
+    if (checked) return;
+    const j = i + dir;
+    if (j < 0 || j >= arr.length) return;
+    setArr((a) => {
+      const b = a.slice();
+      [b[i], b[j]] = [b[j], b[i]];
+      return b;
+    });
+  }
+
+  return (
+    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+      <div className="text-xs font-medium text-ink-3">Remets dans le bon ordre</div>
+      <p className="font-semibold">{card.t}</p>
+      <div className="flex flex-col gap-2">
+        {arr.map((el, i) => {
+          const ok = checked && el === correct[i];
+          const bad = checked && el !== correct[i];
+          return (
+            <div
+              key={i}
+              className={`flex items-center gap-2 rounded-[var(--r-inner)] border p-2.5 ${
+                ok ? "border-[var(--green)]" : bad ? "border-[var(--coral)]" : "border-line bg-white/50"
+              }`}
+            >
+              <span className="display text-ink-3 w-5 text-center">{i + 1}</span>
+              <span className="flex-1">{el}</span>
+              {!checked && (
+                <span className="flex flex-col">
+                  <button onClick={() => move(i, -1)} disabled={i === 0} className="text-ink-3 hover:text-ink disabled:opacity-30" aria-label="Monter">
+                    <ChevronUp size={16} aria-hidden />
+                  </button>
+                  <button onClick={() => move(i, 1)} disabled={i === arr.length - 1} className="text-ink-3 hover:text-ink disabled:opacity-30" aria-label="Descendre">
+                    <ChevronDown size={16} aria-hidden />
+                  </button>
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {checked && !allRight && (
+        <div className="text-sm">
+          <span className="text-coral">Pas tout à fait.</span> Le bon ordre :
+          <ol className="list-decimal ml-5 mt-1">
+            {correct.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {checked ? (
+        <button className="btn-primary mt-auto self-end" onClick={() => onGrade(allRight ? 5 : 1)}>
+          Suivant <ArrowRight size={16} aria-hidden />
+        </button>
+      ) : (
+        <button className="btn-primary mt-auto self-center px-8" onClick={() => setChecked(true)}>
+          Vérifier
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Apprendre par cœur : test ---------------- */
+function maskLine(ln: string): string {
+  return ln.replace(/[\p{L}\p{N}]/gu, "▁");
+}
+function MemorizeTest({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
+  const lines = useMemo(() => card.d.split("\n"), [card]);
+  const [revealed, setRevealed] = useState(0);
+  const done = revealed >= lines.length;
+  return (
+    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+      <div className="text-xs font-medium text-ink-3">Récite de mémoire</div>
+      <p className="font-semibold">{card.t}</p>
+      <div className="flex flex-col gap-1 leading-relaxed">
+        {lines.map((ln, i) =>
+          i < revealed ? (
+            <p key={i}>{ln || " "}</p>
+          ) : (
+            <p key={i} className="text-ink-3 select-none">{maskLine(ln) || " "}</p>
+          ),
+        )}
+      </div>
+      {!done ? (
+        <button className="btn-ghost mt-auto self-center" onClick={() => setRevealed((r) => r + 1)}>
+          Révéler la ligne suivante
+        </button>
+      ) : (
+        <div className="mt-auto grid grid-cols-2 gap-2.5">
+          <button className="btn-ghost !py-3" style={{ color: "var(--coral)" }} onClick={() => onGrade(1)}>
+            À revoir
+          </button>
+          <button className="btn-primary !py-3" onClick={() => onGrade(4)}>
+            Je savais
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Apprendre par cœur : apprentissage progressif ---------------- */
+function MemorizeLearn({ deck, onFinish }: { deck: Deck; onFinish: (n: number) => void }) {
+  const cards = useMemo(() => shuffle(deck.cards), [deck]);
+  const [i, setI] = useState(0);
+  const [frac, setFrac] = useState(0);
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const c = cards[i];
+  const tokens = useMemo(() => tokenizeWords(c.d), [c]);
+  const wordIdx = useMemo(
+    () => tokens.map((t, idx) => (t.isWord ? idx : -1)).filter((x) => x >= 0),
+    [tokens],
+  );
+  const mask = useMemo(() => {
+    const ranks = maskedSet(c.id, wordIdx.length, frac);
+    const set = new Set<number>();
+    wordIdx.forEach((tokenIndex, rank) => {
+      if (ranks.has(rank)) set.add(tokenIndex);
+    });
+    return set;
+  }, [c, wordIdx, frac]);
+
+  const paliers = [0, 0.25, 0.5, 0.75, 1];
+  function goto(next: number) {
+    setI(next);
+    setFrac(0);
+    setRevealed(new Set());
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-ink-2 display">{i + 1} / {cards.length}</span>
+        <div className="flex gap-1">
+          {paliers.map((p) => (
+            <button
+              key={p}
+              onClick={() => { setFrac(p); setRevealed(new Set()); }}
+              className={
+                frac === p
+                  ? "rounded-full px-2.5 py-1 text-xs font-medium bg-[var(--green)] text-white"
+                  : "btn-ghost !py-1 !px-2.5 text-xs"
+              }
+            >
+              {Math.round(p * 100)}%
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="card p-6 min-h-[42vh]">
+        <p className="font-semibold mb-3">{c.t}</p>
+        <p className="leading-loose whitespace-pre-wrap">
+          {tokens.map((t, idx) => {
+            if (!t.isWord || !mask.has(idx) || revealed.has(idx)) return <span key={idx}>{t.value}</span>;
+            return (
+              <button
+                key={idx}
+                onClick={() => setRevealed((r) => new Set(r).add(idx))}
+                className="rounded px-0.5 text-ink-3 bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]"
+                aria-label="Révéler le mot"
+              >
+                {"▁".repeat(Math.max(1, t.value.length))}
+              </button>
+            );
+          })}
+        </p>
+      </div>
+      <div className="flex items-center justify-between">
+        <button className="btn-ghost" disabled={i === 0} onClick={() => goto(i - 1)}>
+          <ArrowLeft size={16} aria-hidden /> Précédent
+        </button>
+        {i + 1 < cards.length ? (
+          <button className="btn-primary" onClick={() => goto(i + 1)}>
+            Suivant <ArrowRight size={16} aria-hidden />
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={() => onFinish(cards.length)}>
+            Terminer
+          </button>
+        )}
       </div>
     </div>
   );

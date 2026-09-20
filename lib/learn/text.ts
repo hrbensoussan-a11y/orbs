@@ -88,6 +88,91 @@ function sepLen(sep: string): number {
   return sep.trim().length;
 }
 
+// ---- Texte à trous (cloze) ----
+export type ClozeToken =
+  | { type: "text"; value: string }
+  | { type: "blank"; answer: string };
+
+/** Découpe un passage en segments texte / trous, en repérant [[mot]] même collés. */
+export function clozeParse(passage: string): ClozeToken[] {
+  const out: ClozeToken[] = [];
+  const re = /\[\[([^\]]+)\]\]/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(passage))) {
+    if (m.index > last) out.push({ type: "text", value: passage.slice(last, m.index) });
+    out.push({ type: "blank", answer: m[1] });
+    last = m.index + m[0].length;
+  }
+  if (last < passage.length) out.push({ type: "text", value: passage.slice(last) });
+  return out;
+}
+
+export function clozeBlankCount(passage: string): number {
+  return clozeParse(passage).filter((t) => t.type === "blank").length;
+}
+
+/** Tokenise en mots / non-mots pour l'éditeur cloze et le masquage. */
+export type WordToken = { value: string; isWord: boolean };
+export function tokenizeWords(text: string): WordToken[] {
+  const re = /([\p{L}\p{N}][\p{L}\p{N}-]*)|([^\p{L}\p{N}]+)/gu;
+  const out: WordToken[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    out.push({ value: m[0], isWord: m[1] !== undefined });
+  }
+  return out;
+}
+
+// ---- Édition cloze : tokens qui préservent la source (cocher un mot) ----
+export type MarkedToken = { src: string; kind: "blank" | "word" | "other"; word: string };
+
+export function tokenizeMarked(text: string): MarkedToken[] {
+  const re = /\[\[[^\]]+\]\]|[\p{L}\p{N}][\p{L}\p{N}-]*|[^\p{L}\p{N}]+/gu;
+  const out: MarkedToken[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const src = m[0];
+    if (src.startsWith("[[") && src.endsWith("]]")) {
+      out.push({ src, kind: "blank", word: src.slice(2, -2) });
+    } else if (/[\p{L}\p{N}]/u.test(src[0])) {
+      out.push({ src, kind: "word", word: src });
+    } else {
+      out.push({ src, kind: "other", word: src });
+    }
+  }
+  return out;
+}
+
+export function toggleMarkedToken(tokens: MarkedToken[], i: number): string {
+  return tokens
+    .map((t, j) => {
+      if (j !== i || t.kind === "other") return t.src;
+      return t.kind === "blank" ? t.word : `[[${t.word}]]`;
+    })
+    .join("");
+}
+
+// ---- Masquage déterministe (apprendre par cœur) ----
+function hashStr(s: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Ensemble d'indices de mots masqués pour une fraction donnée (nesté : un
+ *  palier supérieur masque au moins les mêmes mots). Déterministe par (seed, i). */
+export function maskedSet(seed: string, wordCount: number, frac: number): Set<number> {
+  const order = [...Array(wordCount).keys()].sort(
+    (a, b) => hashStr(seed + ":" + a) - hashStr(seed + ":" + b),
+  );
+  const n = Math.round(frac * wordCount);
+  return new Set(order.slice(0, n));
+}
+
 function detectSeparator(lines: string[]): string {
   const candidates = ["\t", "—", "–", ":", "=", "|", ";", " - "];
   let best = ":";

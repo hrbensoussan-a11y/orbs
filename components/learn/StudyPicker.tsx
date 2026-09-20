@@ -10,6 +10,9 @@ import {
   Check,
   List,
   HelpCircle,
+  AlignLeft,
+  Eye,
+  ArrowUpDown,
   type LucideIcon,
 } from "lucide-react";
 import type { Deck } from "@/lib/learn/types";
@@ -23,7 +26,11 @@ export type Mode =
   | "match"
   | "truefalse"
   | "fiche"
-  | "interro";
+  | "interro"
+  | "cloze"
+  | "memorize_learn"
+  | "memorize_test"
+  | "order";
 
 type Activity = {
   mode: Mode;
@@ -50,6 +57,34 @@ const QUESTION_ACTIVITIES: Activity[] = [
   { mode: "fiche", label: "Fiche", desc: "Masque les réponses et interroge-toi.", Icon: List, min: 1 },
 ];
 
+const CLOZE_ACTIVITIES: Activity[] = [
+  { mode: "cloze", label: "Texte à trous", desc: "Retrouve les mots cachés dans le contexte.", Icon: AlignLeft, min: 1, featured: true },
+];
+
+const MEMORIZE_ACTIVITIES: Activity[] = [
+  { mode: "memorize_learn", label: "Apprendre", desc: "Masque de plus en plus de mots, à ton rythme.", Icon: Eye, min: 1, featured: true },
+  { mode: "memorize_test", label: "Test", desc: "Tout masqué, révèle ligne par ligne, auto-évalue.", Icon: Check, min: 1 },
+];
+
+const ORDER_ACTIVITIES: Activity[] = [
+  { mode: "order", label: "Remettre dans l’ordre", desc: "Réordonne les éléments mélangés.", Icon: ArrowUpDown, min: 1, featured: true },
+];
+
+function activitiesFor(kind: Deck["kind"]): Activity[] {
+  switch (kind) {
+    case "questions":
+      return QUESTION_ACTIVITIES;
+    case "cloze":
+      return CLOZE_ACTIVITIES;
+    case "memorize":
+      return MEMORIZE_ACTIVITIES;
+    case "order":
+      return ORDER_ACTIVITIES;
+    default:
+      return DEF_ACTIVITIES;
+  }
+}
+
 export function StudyPicker({
   deck,
   onStart,
@@ -61,7 +96,7 @@ export function StudyPicker({
   onBack: () => void;
   onEdit: () => void;
 }) {
-  const activities = deck.kind === "questions" ? QUESTION_ACTIVITIES : DEF_ACTIVITIES;
+  const activities = activitiesFor(deck.kind);
   const due = dueCount(deck);
 
   return (
