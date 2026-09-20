@@ -1,10 +1,9 @@
-import { cookies } from "next/headers";
+import Link from "next/link";
+import { ArrowLeft, Download, LogOut } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateSettings } from "@/app/actions/settings";
 import { logout } from "@/app/actions/auth";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { THEME_COOKIE, type ThemeName } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -13,49 +12,28 @@ export default async function SettingsPage() {
   const settings = await prisma.settings.findUnique({
     where: { userId: user.id },
   });
-  const theme: ThemeName =
-    (await cookies()).get(THEME_COOKIE)?.value === "dark" ? "dark" : "light";
-
-  const font = settings?.font ?? "serif";
   const fontSize = settings?.fontSize ?? "base";
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 flex flex-col gap-6">
-      <h1 className="font-serif text-2xl">Réglages</h1>
+    <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)] flex flex-col gap-4">
+      <div className="flex items-center gap-3 mb-1">
+        <Link href="/accueil" className="btn-ghost !px-2.5" aria-label="Retour">
+          <ArrowLeft size={18} aria-hidden />
+        </Link>
+        <h1 className="text-2xl font-semibold">Réglages</h1>
+      </div>
 
       {/* Apparence */}
       <section className="card p-5">
-        <h2 className="font-medium mb-4">Apparence</h2>
-
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <p>Thème</p>
-            <p className="text-sm text-muted">Clair ou sombre (idéal le soir).</p>
-          </div>
-          <ThemeToggle initial={theme} />
-        </div>
-
-        <form action={updateSettings} className="mt-4 flex flex-col gap-4">
-          <label className="flex items-center justify-between gap-4">
-            <span>Police de lecture</span>
-            <select name="font" defaultValue={font} className="input max-w-40">
-              <option value="serif">Serif (livre)</option>
-              <option value="sans">Sans-serif</option>
-            </select>
-          </label>
-          <label className="flex items-center justify-between gap-4">
-            <span>Taille du texte</span>
-            <select
-              name="fontSize"
-              defaultValue={fontSize}
-              className="input max-w-40"
-            >
-              <option value="sm">Petite</option>
-              <option value="base">Normale</option>
-              <option value="lg">Grande</option>
-            </select>
-          </label>
-          <button type="submit" className="btn-primary self-start">
+        <h2 className="font-semibold mb-4">Apparence</h2>
+        <form action={updateSettings} className="flex items-center justify-between gap-4">
+          <span>Taille du texte</span>
+          <select name="fontSize" defaultValue={fontSize} className="input max-w-44">
+            <option value="sm">Petite</option>
+            <option value="base">Normale</option>
+            <option value="lg">Grande</option>
+          </select>
+          <button type="submit" className="btn-primary">
             Enregistrer
           </button>
         </form>
@@ -63,35 +41,30 @@ export default async function SettingsPage() {
 
       {/* Données */}
       <section className="card p-5">
-        <h2 className="font-medium mb-1">Tes données</h2>
-        <p className="text-sm text-muted mb-4">
+        <h2 className="font-semibold mb-1">Tes données</h2>
+        <p className="text-sm text-ink-2 mb-4">
           Ton journal t’appartient. L’export est libre et complet — c’est aussi
           ta sauvegarde. Garde une copie en lieu sûr.
         </p>
         <div className="flex flex-wrap gap-3">
           <a href="/api/export?format=json" className="btn-ghost" download>
-            Exporter en JSON
+            <Download size={16} aria-hidden /> Exporter en JSON
           </a>
           <a href="/api/export?format=md" className="btn-ghost" download>
-            Exporter en Markdown
+            <Download size={16} aria-hidden /> Exporter en Markdown
           </a>
         </div>
-        <p className="text-xs text-muted mt-4">
-          À venir : chiffrement de bout en bout, verrou par code, et
-          récupération de compte. En attendant, l’export reste ta meilleure
-          sauvegarde.
-        </p>
       </section>
 
       {/* Compte */}
       <section className="card p-5">
-        <h2 className="font-medium mb-1">Compte</h2>
-        <p className="text-sm text-muted mb-4">
-          Connecté en tant que <span className="text-ink">{user.email}</span>.
+        <h2 className="font-semibold mb-1">Compte</h2>
+        <p className="text-sm text-ink-2 mb-4">
+          Connecté·e en tant que <span className="text-ink">{user.email}</span>.
         </p>
         <form action={logout}>
           <button type="submit" className="btn-ghost">
-            Se déconnecter
+            <LogOut size={16} aria-hidden /> Se déconnecter
           </button>
         </form>
       </section>

@@ -23,7 +23,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (session && (isAuthPage || pathname === "/")) {
-    return NextResponse.redirect(new URL("/timeline", request.url));
+    return NextResponse.redirect(new URL("/accueil", request.url));
   }
 
   return NextResponse.next();

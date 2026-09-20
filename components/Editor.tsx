@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, X, ChevronRight, ChevronDown } from "lucide-react";
 import { MoodPicker } from "./MoodPicker";
 
 export type EditorEntry = {
@@ -225,32 +226,33 @@ export function Editor({
   const showPrompt = !promptDismissed && !content.trim();
 
   return (
-    <div className="mx-auto max-w-2xl px-4 pb-24 pt-4">
+    <div className="mx-auto max-w-xl px-4 pb-24 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
       {/* Barre supérieure discrète */}
-      <div className="flex items-center justify-between gap-3 mb-4 text-sm">
-        <Link href="/timeline" className="text-muted hover:text-ink">
-          ← Journal
+      <div className="flex items-center justify-between gap-3 mb-3 text-sm">
+        <Link href="/timeline" className="btn-ghost !py-1.5">
+          <ArrowLeft size={16} aria-hidden /> Journal
         </Link>
         <div className="flex items-center gap-3">
           <SaveIndicator status={status} />
-          <button type="button" onClick={finish} className="btn-ghost !py-1.5">
+          <button type="button" onClick={finish} className="btn-primary !py-1.5">
             Terminé
           </button>
         </div>
       </div>
 
+      <div className="card p-5">
       {/* Prompt suggéré, ignorable */}
       {showPrompt && (
-        <div className="mb-3 flex items-start justify-between gap-2 rounded-xl border border-line bg-surface-2/60 px-3 py-2 text-sm text-muted">
+        <div className="mb-3 flex items-start justify-between gap-2 rounded-[var(--r-inner)] border border-line bg-white/40 px-3 py-2 text-sm text-ink-2">
           <span className="italic">{suggestedPrompt}</span>
           <button
             type="button"
             onClick={() => setPromptDismissed(true)}
-            className="shrink-0 opacity-70 hover:opacity-100"
+            className="shrink-0 text-ink-3 hover:text-ink"
             aria-label="Masquer la suggestion"
             title="Masquer"
           >
-            ✕
+            <X size={16} aria-hidden />
           </button>
         </div>
       )}
@@ -278,10 +280,15 @@ export function Editor({
         <button
           type="button"
           onClick={() => setShowMeta((s) => !s)}
-          className="text-sm text-muted hover:text-ink"
+          className="inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink"
           aria-expanded={showMeta}
         >
-          {showMeta ? "▾ Détails" : "▸ Détails (humeur, tags, lieu, date)"}
+          {showMeta ? (
+            <ChevronDown size={15} aria-hidden />
+          ) : (
+            <ChevronRight size={15} aria-hidden />
+          )}
+          Détails (humeur, tags, lieu, date)
         </button>
 
         {showMeta && (
@@ -325,6 +332,7 @@ export function Editor({
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

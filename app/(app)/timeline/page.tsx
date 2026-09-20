@@ -46,7 +46,8 @@ export default async function TimelinePage() {
   const months = groupByMonth(rest);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
+    <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)] pb-6">
+      <h1 className="text-2xl font-semibold mb-4">Journal</h1>
       {/* Invitation à écrire aujourd'hui */}
       <section className="card p-5 mb-8">
         <p className="text-muted text-sm">
@@ -75,10 +76,10 @@ export default async function TimelinePage() {
           </Link>
         </div>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-8 stagger">
           {pinned.length > 0 && (
             <section>
-              <h2 className="text-xs uppercase tracking-wide text-muted mb-3">
+              <h2 className="text-sm font-semibold text-ink-2 mb-3">
                 Épinglées
               </h2>
               <div className="flex flex-col gap-3">
@@ -91,7 +92,7 @@ export default async function TimelinePage() {
 
           {months.map((group) => (
             <section key={group.key}>
-              <h2 className="text-xs uppercase tracking-wide text-muted mb-3">
+              <h2 className="text-sm font-semibold text-ink-2 mb-3">
                 {group.label}
               </h2>
               <div className="flex flex-col gap-3">

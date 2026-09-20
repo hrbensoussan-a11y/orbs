@@ -1,18 +1,14 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
-import { THEME_COOKIE } from "@/lib/constants";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Orbs — journal",
-  description: "Un carnet calme pour écrire, chaque jour.",
+  title: "Orbs",
+  description: "Ton assistant scolaire — journal, agenda, cours et plus.",
 };
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const theme = (await cookies()).get(THEME_COOKIE)?.value;
-  const isDark = theme === "dark";
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr" className={isDark ? "dark" : undefined}>
+    <html lang="fr">
       <body>{children}</body>
     </html>
   );

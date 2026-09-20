@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Pin, Star } from "lucide-react";
 import type { EntryWithTags } from "@/lib/entries";
 import { excerpt } from "@/lib/entries";
 import { moodEmoji } from "@/lib/definitions";
@@ -11,15 +12,13 @@ export function EntryCard({ entry }: { entry: EntryWithTags }) {
   return (
     <Link
       href={`/entry/${entry.id}`}
-      className="card block p-4 transition-colors hover:border-accent/50"
+      className="card block p-4 transition-transform duration-200 hover:-translate-y-[3px] hover:shadow-[var(--shadow-float)]"
     >
-      <div className="flex items-center justify-between gap-3 text-xs text-muted">
+      <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
         <span className="flex items-center gap-1.5">
-          {entry.pinned && <span title="Épinglée">📌</span>}
+          {entry.pinned && <Pin size={13} className="text-ink-2" aria-hidden />}
           {entry.favorite && (
-            <span className="text-accent" title="Favori">
-              ★
-            </span>
+            <Star size={13} className="text-amber fill-[var(--amber)]" aria-hidden />
           )}
           <span className="capitalize">{relativeDay(entry.entryDate)}</span>
         </span>
@@ -31,14 +30,16 @@ export function EntryCard({ entry }: { entry: EntryWithTags }) {
       </div>
 
       {entry.title && (
-        <h3 className="font-serif text-lg mt-1.5 leading-snug">{entry.title}</h3>
+        <h3 className="text-lg font-semibold mt-1.5 leading-snug">
+          {entry.title}
+        </h3>
       )}
 
       {preview ? (
-        <p className="text-muted mt-1 line-clamp-2 leading-relaxed">{preview}</p>
+        <p className="text-ink-2 mt-1 line-clamp-2 leading-relaxed">{preview}</p>
       ) : (
         !entry.title && (
-          <p className="text-muted/70 italic mt-1">(entrée vide)</p>
+          <p className="text-ink-3 italic mt-1">(entrée vide)</p>
         )
       )}
 

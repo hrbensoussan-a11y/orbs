@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { Trash2 } from "lucide-react";
 
 export function DeleteEntryButton({
   action,
@@ -25,9 +26,12 @@ export function DeleteEntryButton({
             formRef.current?.requestSubmit();
           }
         }}
-        className="btn-ghost text-red-600 dark:text-red-400"
+        className="btn-ghost !px-2.5"
+        style={{ color: "var(--coral)" }}
+        title="Supprimer"
+        aria-label="Supprimer"
       >
-        Supprimer
+        <Trash2 size={16} aria-hidden />
       </button>
     </form>
   );

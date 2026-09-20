@@ -17,9 +17,10 @@ export function tagConnectInput(userId: string, names: string[]) {
 export function excerpt(content: string, max = 180): string {
   const plain = content
     .replace(/```[\s\S]*?```/g, " ") // blocs de code
-    .replace(/[#>*_`~\-]+/g, " ") // marqueurs md
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // liens -> texte
+    .replace(/[#>*_`~\-]+/g, " ") // marqueurs md
+    .replace(/\s+([,.;:!?…])/g, "$1") // espace avant ponctuation
     .replace(/\s+/g, " ")
     .trim();
   if (plain.length <= max) return plain;

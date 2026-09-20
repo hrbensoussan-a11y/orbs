@@ -38,8 +38,8 @@ export default async function SearchPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="font-serif text-2xl mb-4">Rechercher</h1>
+    <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)] pb-6">
+      <h1 className="text-2xl font-semibold mb-4">Rechercher</h1>
 
       <form method="GET" className="card p-4 flex flex-col gap-3 mb-6">
         <input
