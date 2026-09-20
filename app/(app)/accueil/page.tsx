@@ -12,15 +12,9 @@ import {
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
+import { Avatar } from "@/components/avatar/Avatar";
 
 export const dynamic = "force-dynamic";
-
-function initials(name: string | null, email: string): string {
-  const base = (name && name.trim()) || email.split("@")[0];
-  const parts = base.split(/[\s._-]+/).filter(Boolean);
-  const two = (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
-  return (two || base.slice(0, 2)).toUpperCase();
-}
 
 const TILES = [
   { key: "cartes", label: "Cartes", sub: "2 cartes", Icon: CreditCard, tone: "amber" },
@@ -94,17 +88,15 @@ export default async function AccueilPage() {
     <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)]">
       {/* Barre profil */}
       <div className="flex items-center gap-2 mb-5">
-        <div className="glass-strong flex items-center gap-2.5 rounded-full pl-1.5 pr-3 py-1.5">
-          <span
-            className="grid place-items-center h-9 w-9 rounded-full text-white text-sm font-semibold"
-            style={{ background: "linear-gradient(135deg, var(--green), var(--sky))" }}
-            aria-hidden
-          >
-            {initials(user.name, user.email)}
-          </span>
+        <Link
+          href="/compte"
+          className="glass-strong flex items-center gap-2.5 rounded-full pl-1.5 pr-3 py-1.5"
+          aria-label="Mon compte"
+        >
+          <Avatar config={user.avatar} size={38} className="shrink-0" />
           <span className="font-semibold leading-none">{name}</span>
           <ChevronDown size={16} className="text-ink-3" aria-hidden />
-        </div>
+        </Link>
         <div className="ml-auto flex items-center gap-2">
           <AppearanceButton />
           <Link href="/settings" className="glass-strong grid place-items-center h-11 w-11 rounded-full text-ink-2" title="Réglages" aria-label="Réglages">

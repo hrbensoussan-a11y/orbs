@@ -24,6 +24,13 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Profil / compte
+  firstName   String? // prénom
+  lastName    String? // nom
+  schoolClass String? // classe, ex. « Terminale S »
+  school      String? // établissement
+  avatar      String? // configuration de l'avatar (JSON)
+
   entries  Entry[]
   tags     Tag[]
   settings Settings?
