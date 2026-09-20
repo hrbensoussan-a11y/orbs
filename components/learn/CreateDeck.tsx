@@ -326,10 +326,10 @@ export function CreateDeck({
 function ClozePreview({ text, onChange }: { text: string; onChange: (next: string) => void }) {
   const tokens = tokenizeMarked(text);
   if (!text.trim()) {
-    return <div className="rounded-[var(--r-inner)] bg-white/40 p-3 text-sm text-ink-3 italic">L’aperçu apparaîtra ici.</div>;
+    return <div className="rounded-[var(--r-inner)] bg-fill p-3 text-sm text-ink-3 italic">L’aperçu apparaîtra ici.</div>;
   }
   return (
-    <div className="rounded-[var(--r-inner)] bg-white/40 p-3 leading-relaxed whitespace-pre-wrap">
+    <div className="rounded-[var(--r-inner)] bg-fill p-3 leading-relaxed whitespace-pre-wrap">
       {tokens.map((tk, i) => {
         if (tk.kind === "other") return <span key={i}>{tk.src}</span>;
         const blank = tk.kind === "blank";
@@ -340,7 +340,7 @@ function ClozePreview({ text, onChange }: { text: string; onChange: (next: strin
             className={`rounded-md px-0.5 transition ${
               blank
                 ? "bg-[color-mix(in_srgb,var(--green)_22%,transparent)] text-green-ink font-medium"
-                : "hover:bg-white/70"
+                : "hover:bg-fill2"
             }`}
           >
             {tk.word}

@@ -21,7 +21,16 @@
   --glass: rgba(255, 255, 255, 0.6);
   --glass-strong: rgba(255, 255, 255, 0.72);
   --glass-stroke: rgba(255, 255, 255, 0.7);
+  --fill: rgba(255, 255, 255, 0.5);
+  --fill-2: rgba(255, 255, 255, 0.7);
   --blur: 22px;
+
+  /* Fond vivant (arc-en-ciel & variantes) */
+  --canvas: #eaf0f4;
+  --m1: #ffe1ce; --m2: #e7d3ff; --m3: #cff3df; --m4: #d5e7ff;
+  --vign: rgba(31, 41, 68, 0.16);
+  --veil: transparent;
+  --dim: 0;
 
   /* Rayons */
   --r-card: 26px;
@@ -62,9 +71,11 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
 
-  --color-canvas: #eaf0f4;
+  --color-canvas: var(--canvas);
   --color-surface: var(--glass);
-  --color-surface-2: rgba(255, 255, 255, 0.42);
+  --color-surface-2: var(--fill);
+  --color-fill: var(--fill);
+  --color-fill2: var(--fill-2);
   --color-muted: var(--ink-2);
   --color-line: var(--glass-stroke);
   --color-accent: var(--green);
@@ -75,32 +86,72 @@
   --font-display: "Clash Grotesk", "General Sans", system-ui, sans-serif;
 }
 
+/* ===== Fonds d'écran (arc-en-ciel & variantes) ===== */
+:root[data-bg="mint"]   { --canvas: #eaf3ee; --m1: #d7f5e3; --m2: #cdeede; --m3: #bff0d6; --m4: #dcf3ea; }
+:root[data-bg="sunset"] { --canvas: #f6ede6; --m1: #ffe0c9; --m2: #ffd3c1; --m3: #ffe9c7; --m4: #ffd9e0; }
+:root[data-bg="ocean"]  { --canvas: #e8f0f6; --m1: #cfe6ff; --m2: #d2f0f4; --m3: #cfe9ff; --m4: #dbe7ff; }
+:root[data-bg="plain"]  { --canvas: #f1f3f6; --m1: #eef1f5; --m2: #f0eef5; --m3: #eef4f0; --m4: #eef2f7; --vign: rgba(31, 41, 68, 0.05); }
+
+/* ===== Thèmes (après les fonds : gagnent sur --canvas / --veil) ===== */
+:root[data-theme="warm"] {
+  --ink: #3a2f22; --ink-2: #6b5b47; --ink-3: #a9977f;
+  --glass: rgba(255, 250, 240, 0.66); --glass-strong: rgba(255, 251, 243, 0.78);
+  --glass-stroke: rgba(255, 240, 220, 0.75);
+  --fill: rgba(255, 247, 234, 0.55); --fill-2: rgba(255, 247, 234, 0.78);
+  --canvas: #f4ead7; --vign: rgba(120, 80, 30, 0.16); --veil: rgba(255, 176, 84, 0.12);
+  --highlight: inset 0 1px 0 rgba(255, 248, 235, 0.5);
+}
+:root[data-theme="dark"] {
+  --green-ink: #5fd08a;
+  --ink: #e8e5de; --ink-2: #a9a496; --ink-3: #7b766a;
+  --glass: rgba(38, 42, 49, 0.58); --glass-strong: rgba(46, 51, 59, 0.72);
+  --glass-stroke: rgba(255, 255, 255, 0.12);
+  --fill: rgba(255, 255, 255, 0.07); --fill-2: rgba(255, 255, 255, 0.13);
+  --canvas: #12141a; --vign: rgba(0, 0, 0, 0.5); --veil: rgba(12, 14, 18, 0.72);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.28);
+  --shadow-float: 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+
 html { height: 100%; }
 body {
   min-height: 100%;
   margin: 0;
   color: var(--ink);
   font-family: "General Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #eaf0f4;
+  background: var(--canvas);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   line-height: 1.5;
+  transition: background var(--t-base) var(--ease), color var(--t-base) var(--ease);
 }
 
-/* --- Fond vivant : dégradé mesh pastel + vignette + grain --- */
+/* --- Fond vivant : dégradé mesh pastel + vignette + voile + grain --- */
 body::before {
   content: "";
   position: fixed;
   inset: -12%;
   z-index: -2;
   background:
-    radial-gradient(130% 130% at 50% 42%, transparent 60%, rgba(31, 41, 68, 0.16) 100%),
-    radial-gradient(60% 60% at 15% 20%, #ffe1ce 0%, transparent 60%),
-    radial-gradient(55% 55% at 85% 15%, #e7d3ff 0%, transparent 60%),
-    radial-gradient(60% 60% at 80% 85%, #cff3df 0%, transparent 60%),
-    radial-gradient(60% 60% at 20% 90%, #d5e7ff 0%, transparent 60%),
-    #eaf0f4;
+    linear-gradient(var(--veil), var(--veil)),
+    radial-gradient(130% 130% at 50% 42%, transparent 60%, var(--vign) 100%),
+    radial-gradient(60% 60% at 15% 20%, var(--m1) 0%, transparent 60%),
+    radial-gradient(55% 55% at 85% 15%, var(--m2) 0%, transparent 60%),
+    radial-gradient(60% 60% at 80% 85%, var(--m3) 0%, transparent 60%),
+    radial-gradient(60% 60% at 20% 90%, var(--m4) 0%, transparent 60%),
+    var(--canvas);
   animation: bg-drift 85s var(--ease) infinite alternate;
+}
+/* Calque de luminosité (nuit) */
+html::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: #000;
+  opacity: calc(var(--dim) * 0.45);
+  transition: opacity var(--t-base) var(--ease);
 }
 body::after {
   content: "";
@@ -177,7 +228,7 @@ body::after {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--fill-2);
   backdrop-filter: blur(10px) saturate(160%);
   -webkit-backdrop-filter: blur(10px) saturate(160%);
   color: var(--ink);
@@ -195,7 +246,7 @@ body::after {
 /* ===================== Champs ===================== */
 .input {
   width: 100%;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--fill-2);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-inner);
   padding: 0.7rem 0.85rem;
@@ -210,7 +261,7 @@ select.input { appearance: none; }
 .chip {
   display: inline-flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--fill);
   color: var(--ink-2);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-pill);
@@ -259,8 +310,8 @@ select.input { appearance: none; }
 .reading ul { list-style: disc; }
 .reading ol { list-style: decimal; }
 .reading li + li { margin-top: 0.3em; }
-.reading code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: rgba(255,255,255,.5); padding: 0.1em 0.35em; border-radius: 6px; }
-.reading pre { background: rgba(255,255,255,.5); padding: 0.9em 1em; border-radius: 12px; overflow-x: auto; }
+.reading code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: var(--fill); padding: 0.1em 0.35em; border-radius: 6px; }
+.reading pre { background: var(--fill); padding: 0.9em 1em; border-radius: 12px; overflow-x: auto; }
 .reading pre code { background: none; padding: 0; }
 .reading hr { border: none; border-top: 1px solid var(--glass-stroke); }
 

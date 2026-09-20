@@ -242,7 +242,7 @@ function Home({
             </span>
           </div>
         </div>
-        <div className="mt-3 h-2 rounded-full bg-white/50 overflow-hidden">
+        <div className="mt-3 h-2 rounded-full bg-fill overflow-hidden">
           <div className="h-full rounded-full bg-[var(--green)]" style={{ width: `${Math.round(prog * 100)}%` }} />
         </div>
         <div className="mt-3 flex items-center justify-between text-sm">
@@ -331,7 +331,7 @@ function Home({
                     <span className="text-ink-3">{KIND_META[deck.kind].label}</span>
                     <span className="text-ink-3">· {deck.cards.length} cartes</span>
                   </div>
-                  <div className="mt-3 h-1.5 rounded-full bg-white/50 overflow-hidden">
+                  <div className="mt-3 h-1.5 rounded-full bg-fill overflow-hidden">
                     <div className="h-full rounded-full bg-[var(--green)]" style={{ width: `${pct}%` }} />
                   </div>
                 </button>

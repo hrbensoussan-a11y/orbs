@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateSettings } from "@/app/actions/settings";
 import { logout } from "@/app/actions/auth";
+import { AppearanceButton } from "@/components/AppearanceButton";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,14 @@ export default async function SettingsPage() {
       {/* Apparence */}
       <section className="card p-5">
         <h2 className="font-semibold mb-4">Apparence</h2>
-        <form action={updateSettings} className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <p>Thème & fond</p>
+            <p className="text-sm text-ink-2">Clair, anti-lumière bleue, sombre, luminosité, fonds.</p>
+          </div>
+          <AppearanceButton variant="row" />
+        </div>
+        <form action={updateSettings} className="flex items-center justify-between gap-4 border-t border-line pt-4">
           <span>Taille du texte</span>
           <select name="fontSize" defaultValue={fontSize} className="input max-w-44">
             <option value="sm">Petite</option>

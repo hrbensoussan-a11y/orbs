@@ -243,7 +243,7 @@ export function Editor({
       <div className="card p-5">
       {/* Prompt suggéré, ignorable */}
       {showPrompt && (
-        <div className="mb-3 flex items-start justify-between gap-2 rounded-[var(--r-inner)] border border-line bg-white/40 px-3 py-2 text-sm text-ink-2">
+        <div className="mb-3 flex items-start justify-between gap-2 rounded-[var(--r-inner)] border border-line bg-fill px-3 py-2 text-sm text-ink-2">
           <span className="italic">{suggestedPrompt}</span>
           <button
             type="button"

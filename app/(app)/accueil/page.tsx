@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Settings,
-  Palette,
   CreditCard,
   UtensilsCrossed,
   UserRoundX,
@@ -12,6 +11,7 @@ import {
   Clock,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
+import { AppearanceButton } from "@/components/AppearanceButton";
 
 export const dynamic = "force-dynamic";
 
@@ -106,9 +106,7 @@ export default async function AccueilPage() {
           <ChevronDown size={16} className="text-ink-3" aria-hidden />
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <button className="glass-strong grid place-items-center h-11 w-11 rounded-full text-ink-2" title="Personnaliser" aria-label="Personnaliser">
-            <Palette size={19} strokeWidth={1.8} aria-hidden />
-          </button>
+          <AppearanceButton />
           <Link href="/settings" className="glass-strong grid place-items-center h-11 w-11 rounded-full text-ink-2" title="Réglages" aria-label="Réglages">
             <Settings size={19} strokeWidth={1.8} aria-hidden />
           </Link>
@@ -159,7 +157,7 @@ export default async function AccueilPage() {
                   </div>
                   <div className="flex items-center gap-3 mt-2">
                     <span
-                      className="rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-semibold"
+                      className="rounded-full bg-fill2 px-2.5 py-0.5 text-xs font-semibold"
                       style={{ color: TONE[c.tone] }}
                     >
                       {c.tag}

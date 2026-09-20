@@ -602,7 +602,7 @@ function ClozeCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
                   ? "border-[var(--green)] text-green-ink"
                   : state === "bad"
                     ? "border-[var(--coral)] text-coral"
-                    : "border-line bg-white/60"
+                    : "border-line bg-fill2"
               }`}
             />
           );
@@ -665,7 +665,7 @@ function OrderCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
             <div
               key={i}
               className={`flex items-center gap-2 rounded-[var(--r-inner)] border p-2.5 ${
-                ok ? "border-[var(--green)]" : bad ? "border-[var(--coral)]" : "border-line bg-white/50"
+                ok ? "border-[var(--green)]" : bad ? "border-[var(--coral)]" : "border-line bg-fill"
               }`}
             >
               <span className="display text-ink-3 w-5 text-center">{i + 1}</span>
