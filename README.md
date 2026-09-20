@@ -32,10 +32,27 @@ npm run dev                  # http://localhost:3000
 | Onglet | Route | État |
 | --- | --- | --- |
 | Menu (accueil) | `/accueil` | Maquette (données scolarité = équipe Pronote) |
-| Apprendre | `/apprendre` | En préparation |
+| Apprendre | `/apprendre` | **Fonctionnel** (Définitions + Questions) |
 | IA | `/ia` | En préparation (équipe IA) |
 | Journal | `/timeline` | **Fonctionnel** |
 | Agenda | `/agenda` | En préparation |
+
+## Le module Apprendre (fonctionnel)
+
+Moteur de révision **local** (localStorage, aucun compte/serveur), style DA.
+
+- Paquets par matière ; création en **collant un cours** (détection du
+  séparateur) ou à la main ; favoris, édition, suppression.
+- Planificateur **répétition espacée SM-2** (grade/intervalles, file des dues).
+- Type **Définitions** : révision intelligente, recto-verso, QCM, écrire,
+  associer, vrai/faux, fiche. Type **Questions de cours** : interro + fiche.
+- **Progression** : XP, niveaux, série (streak), objectif quotidien, badges,
+  maîtrise par carte/paquet. **Pomodoro** (concentration) nourrit la progression.
+- **Export / import** (fusion) et **partage** d'un paquet par code.
+- Vérification tolérante (accents/ponctuation/casse ignorés).
+
+À venir : types **Texte à trous**, **Apprendre par cœur**, **Remettre dans
+l'ordre** ; OCR photo → cartes.
 
 ## Le module Journal (fonctionnel)
 
