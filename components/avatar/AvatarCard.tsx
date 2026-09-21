@@ -20,7 +20,7 @@ export function AvatarCard({ initial }: { initial: AvatarConfig }) {
             className="glass-strong rounded-full p-1.5 inline-block"
             style={{ boxShadow: "var(--shadow-float)" }}
           >
-            <Avatar config={initial} size={104} />
+            <Avatar config={initial} size={110} anim />
           </span>
           <span
             className="absolute bottom-0 right-0 grid place-items-center h-8 w-8 rounded-full text-white"

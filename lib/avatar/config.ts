@@ -5,6 +5,8 @@
 // (components/avatar/AvatarBuilder).
 
 export type AvatarConfig = {
+  body: string;
+  pose: string;
   bg: string;
   skin: string;
   hair: string;
@@ -95,6 +97,7 @@ export const EYES: Option[] = [
   { id: "wink", label: "Clin d’œil" },
   { id: "sleepy", label: "Doux" },
   { id: "wide", label: "Grands" },
+  { id: "big", label: "Écarquillés" },
   { id: "kawaii", label: "Étoilés" },
 ];
 
@@ -144,9 +147,24 @@ export const CLOTHINGS: Option[] = [
   { id: "vneck", label: "Col V" },
 ];
 
+export const BODIES: Option[] = [
+  { id: "neutre", label: "Neutre" },
+  { id: "feminin", label: "Féminine" },
+  { id: "masculin", label: "Masculine" },
+];
+
+export const POSES: Option[] = [
+  { id: "none", label: "Aucune" },
+  { id: "wave", label: "Coucou" },
+  { id: "peace", label: "Paix" },
+  { id: "thumbsup", label: "Pouce" },
+];
+
 /* --- Défaut, lecture, aléatoire ----------------------------------------- */
 
 export const DEFAULT_AVATAR: AvatarConfig = {
+  body: "neutre",
+  pose: "none",
   bg: "mint",
   skin: "s1",
   hair: "short",
@@ -178,6 +196,8 @@ export function parseAvatar(raw: unknown): AvatarConfig {
   }
   const d = DEFAULT_AVATAR;
   return {
+    body: has(BODIES, o.body) ? (o.body as string) : d.body,
+    pose: has(POSES, o.pose) ? (o.pose as string) : d.pose,
     bg: has(BGS, o.bg) ? (o.bg as string) : d.bg,
     skin: has(SKINS, o.skin) ? (o.skin as string) : d.skin,
     hair: has(HAIRS, o.hair) ? (o.hair as string) : d.hair,
@@ -203,6 +223,8 @@ export function randomAvatar(): AvatarConfig {
   const maybe = (list: Option[]) =>
     Math.random() < 0.55 ? "none" : pick(list);
   return {
+    body: pick(BODIES),
+    pose: Math.random() < 0.6 ? "none" : pick(POSES),
     bg: pick(BGS),
     skin: pick(SKINS),
     hair: pick(HAIRS),

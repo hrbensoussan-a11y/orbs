@@ -21,12 +21,16 @@ import {
   HEADWEAR,
   CLOTHINGS,
   CLOTHING_COLORS,
+  BODIES,
+  POSES,
   type Option,
 } from "@/lib/avatar/config";
 
 type CatId = keyof AvatarConfig;
 
 const CATS: { id: CatId; label: string; options: Option[] }[] = [
+  { id: "body", label: "Silhouette", options: BODIES },
+  { id: "pose", label: "Poses", options: POSES },
   { id: "bg", label: "Fond", options: BGS },
   { id: "skin", label: "Peau", options: SKINS },
   { id: "hair", label: "Cheveux", options: HAIRS },
@@ -91,7 +95,7 @@ export function AvatarBuilder({
       {/* Aperçu */}
       <div className="flex flex-col items-center gap-2 py-2 shrink-0">
         <div className="glass-strong rounded-full p-2" style={{ boxShadow: "var(--shadow-float)" }}>
-          <Avatar config={cfg} size={132} />
+          <Avatar config={cfg} size={140} anim />
         </div>
         <button
           className="text-sm text-ink-3 underline underline-offset-2"

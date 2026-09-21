@@ -374,3 +374,14 @@ select.input { appearance: none; }
 
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Avatar vivant : léger balancement, clignement, coucou de la main */
+@keyframes avFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+@keyframes avBlink { 0%, 90%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.08); } }
+@keyframes avWave  { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(15deg); } 60% { transform: rotate(-9deg); } }
+svg.av-live .av-body { animation: avFloat 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+svg.av-live .av-eyes { animation: avBlink 5.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transform-box: fill-box; transform-origin: 80% 92%; }
+@media (prefers-reduced-motion: reduce) {
+  svg.av-live .av-body, svg.av-live .av-eyes, svg.av-live .av-wavehand { animation: none; }
+}

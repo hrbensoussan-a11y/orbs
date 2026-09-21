@@ -18,13 +18,15 @@ type Props = {
   className?: string;
   /** Coupe le personnage en cercle (badge). true par défaut. */
   round?: boolean;
+  /** Anime l'avatar (léger balancement, clignement, coucou). */
+  anim?: boolean;
 };
 
 /**
  * Avatar vectoriel entièrement dessiné en SVG à partir de la configuration.
  * Composant pur : rendu identique côté serveur et client.
  */
-export function Avatar({ config, size = 40, className, round = true }: Props) {
+export function Avatar({ config, size = 40, className, round = true, anim = false }: Props) {
   const cfg = parseAvatar(config as unknown);
   const uid = avatarUid(cfg);
   const skin = skinOf(cfg.skin);
@@ -40,7 +42,7 @@ export function Avatar({ config, size = 40, className, round = true }: Props) {
       viewBox="0 0 100 100"
       width={size}
       height={size}
-      className={className}
+      className={[className, anim ? "av-live" : ""].filter(Boolean).join(" ") || undefined}
       role="img"
       aria-label="Avatar"
       style={{ display: "block", borderRadius: round ? "50%" : undefined }}
@@ -67,11 +69,12 @@ export function Avatar({ config, size = 40, className, round = true }: Props) {
       />
 
       <g clipPath={round ? `url(#${clipId})` : undefined}>
+       <g className="av-body">
         {/* Cheveux arrière */}
         {hairBack(cfg.hair, hue.c, hue.hi)}
 
         {/* Épaules / habits */}
-        {clothing(cfg.clothing, cloth, skin.base)}
+        {clothing(cfg.clothing, cloth, skin.base, cfg.body)}
 
         {/* Cou */}
         <path d="M44 60 L44 80 Q50 83 56 80 L56 60 Z" fill={skin.base} />
@@ -93,9 +96,10 @@ export function Avatar({ config, size = 40, className, round = true }: Props) {
         <ellipse cx="37.5" cy="53" rx="3.2" ry="1.9" fill="#ff9e9e" opacity="0.32" />
         <ellipse cx="62.5" cy="53" rx="3.2" ry="1.9" fill="#ff9e9e" opacity="0.32" />
 
-        {/* Sourcils, yeux, nez */}
+        {/* Sourcils, yeux, cils, nez */}
         {brows(cfg.brows, hue.c)}
-        {eyes(cfg.eyes)}
+        <g className="av-eyes">{eyes(cfg.eyes)}</g>
+        {cfg.body === "feminin" && lashes()}
         <path
           d="M48.4 48.5 Q49.6 52 51.4 49.6"
           fill="none"
@@ -116,6 +120,9 @@ export function Avatar({ config, size = 40, className, round = true }: Props) {
 
         {/* Accessoire de tête */}
         {headwear(cfg.headwear, cloth)}
+       </g>
+        {/* Pose (bras + main), au-dessus du corps */}
+        {poseArm(cfg.pose, skin.base, cloth)}
       </g>
     </svg>
   );
@@ -147,6 +154,8 @@ function eyes(style: string): ReactNode {
   switch (style) {
     case "wide":
       return [open(L, 3.8, 4.6), open(R, 3.8, 4.6)];
+    case "big":
+      return [open(L, 4.4, 5.3), open(R, 4.4, 5.3)];
     case "happy":
       return [
         <path key="l" d={`M${L - 3.6} ${cy + 1} Q${L} ${cy - 3.4} ${L + 3.6} ${cy + 1}`} fill="none" stroke={INK} strokeWidth="2.2" strokeLinecap="round" />,
@@ -472,10 +481,78 @@ function headwear(style: string, color: string): ReactNode {
   }
 }
 
+/* --------------------------------------------------------------- Cils / poses */
+
+function lashes(): ReactNode {
+  const set = (cx: number, dir: number) => {
+    const ox = cx + dir * 3.7;
+    const oy = 44.3;
+    return (
+      <g key={cx}>
+        <path d={`M${ox} ${oy} q${dir * 1.9} -1.5 ${dir * 2.7} -2.4`} stroke={INK} strokeWidth="0.9" fill="none" strokeLinecap="round" />
+        <path d={`M${ox - dir * 1.5} ${oy - 0.3} q${dir * 1.3} -1.6 ${dir * 1.9} -2.6`} stroke={INK} strokeWidth="0.9" fill="none" strokeLinecap="round" />
+      </g>
+    );
+  };
+  return [set(42, -1), set(58, 1)];
+}
+
+function handOpen(x: number, y: number, c: string): ReactNode {
+  const fingers = [0, 1, 2, 3].map((i) => {
+    const fx = x - 4.2 + i * 2.8;
+    return <rect key={i} x={fx - 1.2} y={y - 8.5} width="2.4" height="7" rx="1.2" fill={c} />;
+  });
+  return (
+    <g>
+      <circle cx={x} cy={y} r="5" fill={c} />
+      {fingers}
+      <circle cx={x - 5} cy={y + 1} r="1.9" fill={c} />
+    </g>
+  );
+}
+
+function handPeace(x: number, y: number, c: string): ReactNode {
+  return (
+    <g>
+      <circle cx={x} cy={y + 1} r="4.7" fill={c} />
+      <rect x={x - 2.7} y={y - 9} width="2.4" height="9.5" rx="1.2" fill={c} transform={`rotate(-12 ${x - 1.5} ${y})`} />
+      <rect x={x + 0.4} y={y - 9} width="2.4" height="9.5" rx="1.2" fill={c} transform={`rotate(12 ${x + 1.6} ${y})`} />
+    </g>
+  );
+}
+
+function handThumb(x: number, y: number, c: string): ReactNode {
+  return (
+    <g>
+      <circle cx={x} cy={y + 2} r="5" fill={c} />
+      <rect x={x - 1.4} y={y - 6.5} width="2.8" height="8.5" rx="1.4" fill={c} />
+    </g>
+  );
+}
+
+function poseArm(style: string, skin: string, sleeve: string): ReactNode {
+  if (!style || style === "none") return null;
+  const hand =
+    style === "peace" ? handPeace(84, 40, skin) : style === "thumbsup" ? handThumb(84, 40, skin) : handOpen(84, 39, skin);
+  return (
+    <g className={style === "wave" ? "av-arm av-wavehand" : "av-arm"}>
+      <path d="M64 80 Q80 78 84 47" fill="none" stroke={sleeve} strokeWidth="11" strokeLinecap="round" />
+      <path d="M83 58 Q86 50 84 45.5" fill="none" stroke={skin} strokeWidth="9" strokeLinecap="round" />
+      {hand}
+    </g>
+  );
+}
+
 /* ---------------------------------------------------------------- Habits */
 
-function clothing(style: string, color: string, skinBase: string): ReactNode {
-  const base = <path d="M17 100 Q17 84 34 79.5 Q42 77.5 50 77.5 Q58 77.5 66 79.5 Q83 84 83 100 Z" fill={color} />;
+function clothing(style: string, color: string, skinBase: string, body: string): ReactNode {
+  const sh =
+    body === "masculin"
+      ? "M11 100 Q11 82 32 77.5 Q41 75.5 50 75.5 Q59 75.5 68 77.5 Q89 82 89 100 Z"
+      : body === "feminin"
+        ? "M22 100 Q22 86 35 81 Q42 79.2 50 79.2 Q58 79.2 65 81 Q78 86 78 100 Z"
+        : "M17 100 Q17 84 34 79.5 Q42 77.5 50 77.5 Q58 77.5 66 79.5 Q83 84 83 100 Z";
+  const base = <path d={sh} fill={color} />;
   switch (style) {
     case "hoodie":
       return (
