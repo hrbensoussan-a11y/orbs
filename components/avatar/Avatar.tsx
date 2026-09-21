@@ -120,9 +120,10 @@ export function Avatar({ config, size = 40, className, round = true, anim = fals
 
         {/* Accessoire de tête */}
         {headwear(cfg.headwear, cloth)}
-       </g>
-        {/* Pose (bras + main), au-dessus du corps */}
+
+        {/* Pose (bras + main) — dans le groupe du corps pour rester solidaire */}
         {poseArm(cfg.pose, skin.base, cloth)}
+       </g>
       </g>
     </svg>
   );
