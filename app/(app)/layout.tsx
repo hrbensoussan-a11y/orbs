@@ -18,9 +18,9 @@ export default async function AppLayout({
   const style = { "--reading-size": readingSize } as CSSProperties;
 
   return (
-    <div style={style} className="min-h-dvh">
+    <div style={style} className="app-shell min-h-dvh">
       {/* Le fond vivant est global (body::before/::after). */}
-      <main className="w-full pb-28">{children}</main>
+      <main className="app-main w-full pb-28">{children}</main>
       <BottomNav />
     </div>
   );
