@@ -12,6 +12,10 @@ export async function proxy(request: NextRequest) {
   // Les routes API gèrent elles-mêmes leur authentification.
   if (pathname.startsWith("/api/")) return NextResponse.next();
 
+  // Ressources PWA publiques (installation depuis l'écran de connexion).
+  if (pathname === "/manifest.webmanifest" || pathname === "/sw.js")
+    return NextResponse.next();
+
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const session = await decrypt(token);
   const isAuthPage = AUTH_PAGES.has(pathname);
@@ -32,6 +36,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Tout sauf les assets statiques et les fichiers d'image.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)",
   ],
 };
