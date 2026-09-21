@@ -44,9 +44,9 @@ type Activity = {
 const DEF_ACTIVITIES: Activity[] = [
   { mode: "smart", label: "Révision intelligente", desc: "Ce que tu es sur le point d’oublier, d’abord.", Icon: Sparkles, min: 1, featured: true },
   { mode: "flashcards", label: "Recto-verso", desc: "Retourne les cartes à ton rythme.", Icon: RefreshCw, min: 1 },
-  { mode: "mcq", label: "QCM", desc: "Choisis la bonne définition parmi quatre.", Icon: ListChecks, min: 4 },
+  { mode: "mcq", label: "QCM", desc: "Choisis la bonne définition parmi plusieurs.", Icon: ListChecks, min: 2 },
   { mode: "write", label: "Écrire", desc: "Tape le terme à partir de sa définition.", Icon: Pencil, min: 1 },
-  { mode: "match", label: "Associer", desc: "Relie chaque terme à sa définition.", Icon: Shuffle, min: 4 },
+  { mode: "match", label: "Associer", desc: "Relie chaque terme à sa définition.", Icon: Shuffle, min: 2 },
   { mode: "truefalse", label: "Vrai / Faux", desc: "La définition proposée est-elle la bonne ?", Icon: Check, min: 2 },
   { mode: "fiche", label: "Fiche", desc: "Masque les définitions et interroge-toi.", Icon: List, min: 1 },
 ];
