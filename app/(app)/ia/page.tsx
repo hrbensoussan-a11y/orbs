@@ -6,5 +6,6 @@ export default async function IaPage() {
   const user = await requireUser();
   // `aiConfigured()` ne lit que la présence de la clé côté serveur : la clé
   // elle-même n'est jamais transmise au navigateur.
-  return <AiChat firstName={user.firstName} configured={aiConfigured()} />;
+  // Le prénom du compte, sinon le prénom/pseudo saisi à l'inscription.
+  return <AiChat firstName={user.firstName || user.name} configured={aiConfigured()} />;
 }

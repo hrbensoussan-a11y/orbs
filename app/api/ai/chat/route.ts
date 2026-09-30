@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
   // 5) Construction du contexte.
   const system = buildSystemPrompt(
-    { firstName: user.firstName, schoolClass: user.schoolClass },
+    { firstName: user.firstName || user.name, schoolClass: user.schoolClass },
     action,
   );
   const contextBlock = buildContextBlock(context);

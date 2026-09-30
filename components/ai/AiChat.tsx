@@ -135,16 +135,19 @@ export function AiChat({
   );
 
   // Défilement automatique : suit le texte qui se génère, mais uniquement si
-  // l'utilisateur est déjà proche du bas (sinon on ne le dérange pas s'il
-  // remonte lire un message précédent).
+  // la fin de la conversation est (presque) à l'écran, pour ne pas déranger
+  // l'élève qui remonte lire un message précédent. À l'envoi d'un message, on
+  // redescend toujours. On mesure depuis le repère de fin (endRef) et non depuis
+  // la hauteur de la page : celle-ci inclut l'espace sous la réponse réservé à la
+  // zone de saisie et à la barre de navigation, ce qui faussait le calcul.
   const lastLen =
     active?.messages[active.messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
     const el = endRef.current;
     if (!el) return;
-    const nearBottom =
-      window.innerHeight + window.scrollY >= document.body.offsetHeight - 220;
-    if (nearBottom) el.scrollIntoView({ block: "end" });
+    const justSent = loading && lastLen === 0;
+    const nearBottom = el.getBoundingClientRect().bottom <= window.innerHeight + 160;
+    if (justSent || nearBottom) el.scrollIntoView({ block: "end" });
   }, [active?.messages.length, lastLen, loading]);
 
   const updateActive = useCallback(
@@ -552,7 +555,8 @@ export function AiChat({
               </div>
             )}
 
-            <div ref={endRef} />
+            {/* scroll-mb-44 : la fin s'arrête au-dessus de la zone de saisie + barre de navigation */}
+            <div ref={endRef} className="scroll-mb-44" />
           </div>
         )}
       </div>
