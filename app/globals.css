@@ -177,19 +177,21 @@ body::after {
 }
 
 /* ===================== Verre ===================== */
+/* Toujours écrire -webkit-backdrop-filter AVANT backdrop-filter : dans l'autre sens,
+   le build de production supprime la version standard et Chrome/Firefox perdent le flou. */
 .glass,
 .card {
   background: var(--glass);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-soft), var(--highlight);
 }
 .glass-strong {
   background: var(--glass-strong);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-soft), var(--highlight);
@@ -229,8 +231,8 @@ body::after {
   justify-content: center;
   gap: 0.4rem;
   background: var(--fill-2);
-  backdrop-filter: blur(10px) saturate(160%);
   -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
   color: var(--ink);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-pill);
@@ -328,8 +330,8 @@ select.input { appearance: none; }
   gap: 2px;
   padding: 8px;
   background: var(--glass-strong);
-  backdrop-filter: blur(var(--blur)) saturate(180%);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(180%);
+  backdrop-filter: blur(var(--blur)) saturate(180%);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--r-pill);
   box-shadow: var(--shadow-float), var(--highlight);
