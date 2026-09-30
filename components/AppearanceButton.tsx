@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Palette, X } from "lucide-react";
 
 export const APPEARANCE_KEY = "orbs.appearance";
@@ -42,11 +42,7 @@ function apply(a: Appearance) {
 
 export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row" }) {
   const [open, setOpen] = useState(false);
-  const [ap, setAp] = useState<Appearance>({ theme: "light", bg: "rainbow", dim: 0 });
-
-  useEffect(() => {
-    setAp(read());
-  }, []);
+  const [ap, setAp] = useState<Appearance>(read);
 
   function update(patch: Partial<Appearance>) {
     setAp((prev) => {

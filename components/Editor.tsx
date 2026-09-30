@@ -53,6 +53,32 @@ function serialize(v: Values): string {
   return JSON.stringify([v.title, v.content, v.mood, v.location, v.tags, v.entryDate]);
 }
 
+function initializeContent(initial: EditorEntry): string {
+  if (initial.id || initial.content || initial.title) return initial.content;
+  if (typeof window === "undefined") return initial.content;
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (typeof d.content === "string" && d.content.trim()) return d.content;
+    }
+  } catch {}
+  return initial.content;
+}
+
+function initializeTitle(initial: EditorEntry): string {
+  if (initial.id || initial.content || initial.title) return initial.title;
+  if (typeof window === "undefined") return initial.title;
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (typeof d.title === "string") return d.title;
+    }
+  } catch {}
+  return initial.title;
+}
+
 export function Editor({
   initial,
   suggestedPrompt,
@@ -62,8 +88,8 @@ export function Editor({
 }) {
   const router = useRouter();
 
-  const [title, setTitle] = useState(initial.title);
-  const [content, setContent] = useState(initial.content);
+  const [title, setTitle] = useState(() => initializeTitle(initial));
+  const [content, setContent] = useState(() => initializeContent(initial));
   const [mood, setMood] = useState<number | null>(initial.mood);
   const [location, setLocation] = useState(initial.location);
   const [tagsInput, setTagsInput] = useState(initial.tags.join(", "));
@@ -108,6 +134,7 @@ export function Editor({
     valuesRef.current = current();
   });
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const persist = useCallback(async () => {
     if (savingRef.current) return;
     const v = valuesRef.current;
@@ -156,6 +183,7 @@ export function Editor({
         scheduleSave(300);
       }
     }
+    // The refs are always current, so we don't need them in dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [promptDismissed, suggestedPrompt]);
 
@@ -173,20 +201,6 @@ export function Editor({
   useEffect(() => {
     savedRef.current = serialize(current());
     textareaRef.current?.focus();
-    // Restaure un éventuel brouillon local (nouvelle entrée non encore créée).
-    if (!initial.id && !initial.content && !initial.title) {
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const d = JSON.parse(raw);
-          if (typeof d.content === "string" && d.content.trim()) {
-            setContent(d.content);
-            if (typeof d.title === "string") setTitle(d.title);
-            setStatus("idle");
-          }
-        }
-      } catch {}
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

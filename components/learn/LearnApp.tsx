@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useReducer,
   useRef,
   useState,
@@ -57,19 +56,13 @@ type View =
   | { name: "study"; deckId: string; mode: Mode };
 
 export function LearnApp() {
-  const ref = useRef<State | null>(null);
+  const [state] = useState<State | null>(load);
   const [, force] = useReducer((x) => x + 1, 0);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    ref.current = load();
-    setReady(true);
-  }, []);
 
   const save = useCallback(() => {
-    if (ref.current) storeSave(ref.current);
+    if (state) storeSave(state);
     force();
-  }, []);
+  }, [state]);
 
   const [view, setView] = useState<View>({ name: "home" });
   const [pomo, setPomo] = useState(false);
@@ -82,7 +75,18 @@ export function LearnApp() {
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   }, []);
 
-  if (!ready || !ref.current) {
+  const onFocus = useCallback(() => {
+    if (!state) return;
+    // eslint-disable-next-line react-hooks/immutability
+    state.stats.focus += 1;
+    award(state, "focus"); // XP + jour + série
+    recomputeBadges(state);
+    storeSave(state);
+    force();
+    flash("Session de concentration validée ✓");
+  }, [state, flash]);
+
+  if (!state) {
     return (
       <div className="mx-auto max-w-xl px-4 pt-24 text-center text-ink-3">
         Chargement…
@@ -90,15 +94,7 @@ export function LearnApp() {
     );
   }
 
-  const ctx: LearnCtx = { s: ref.current, save };
-
-  function onFocus() {
-    ctx.s.stats.focus += 1;
-    award(ctx.s, "focus"); // XP + jour + série
-    recomputeBadges(ctx.s);
-    ctx.save();
-    flash("Session de concentration validée ✓");
-  }
+  const ctx: LearnCtx = { s: state, save };
 
   let body: React.ReactNode;
   if (view.name === "create") {
@@ -211,6 +207,7 @@ function Home({
     );
   }
   function setGoal(g: number) {
+    // eslint-disable-next-line react-hooks/immutability
     ctx.s.settings.dailyGoal = g;
     ctx.save();
   }

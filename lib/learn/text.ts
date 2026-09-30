@@ -57,7 +57,7 @@ export function parsePaste(text: string, forced?: string): ParseResult {
     .map(stripBullet)
     .filter((l) => l.length > 0);
 
-  let sep = forced && forced !== "auto" ? forced : detectSeparator(lines);
+  const sep = forced && forced !== "auto" ? forced : detectSeparator(lines);
 
   const pairs: { t: string; d: string }[] = [];
   let ignored = 0;

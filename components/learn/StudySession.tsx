@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Check, RotateCw, ArrowLeft, ArrowRight, Trophy, Award, ChevronUp, ChevronDown } from "lucide-react";
 import type { Card, Deck } from "@/lib/learn/types";
 import { grade, previewInterval, dueCards, shuffle } from "@/lib/learn/sm2";
@@ -55,9 +55,14 @@ export function StudySession({
   const [correct, setCorrect] = useState(0);
   const [wrong, setWrong] = useState(0);
   const missedRef = useRef<Map<string, Card>>(new Map());
-  const startRef = useRef(Date.now());
-  const xpStartRef = useRef(ctx.s.stats.xp);
+  const startRef = useRef(0);
+  const xpStartRef = useRef(0);
   const [rewards, setRewards] = useState<Rewards | null>(null);
+
+  useEffect(() => {
+    startRef.current = Date.now();
+    xpStartRef.current = ctx.s.stats.xp;
+  }, [ctx.s.stats.xp]);
 
   const pool = useMemo(() => deck.cards.map((c) => c.d).filter(Boolean), [deck]);
 
@@ -364,8 +369,16 @@ function WriteCard({ card, onAnswer }: { card: Card; onAnswer: (ok: boolean) => 
 function TrueFalse({ card, pool, onAnswer }: { card: Card; pool: string[]; onAnswer: (ok: boolean) => void }) {
   const { shownDef, isReal } = useMemo(() => {
     const others = pool.filter((d) => d !== card.d);
-    const real = Math.random() < 0.5 || others.length === 0;
-    return { shownDef: real ? card.d : others[Math.floor(Math.random() * others.length)], isReal: real };
+    // Deterministic pseudo-random based on card ID for stable randomization per card
+    let hash = 0;
+    for (let i = 0; i < card.id.length; i++) {
+      hash = ((hash << 5) - hash) + card.id.charCodeAt(i);
+      hash = hash & hash;
+    }
+    const pseudoRandom = ((hash >>> 0) % 1000) / 1000;
+    const real = pseudoRandom < 0.5 || others.length === 0;
+    const selectedIdx = Math.floor((pseudoRandom * 10007) % others.length) || 0;
+    return { shownDef: real ? card.d : others[selectedIdx], isReal: real };
   }, [card, pool]);
   const [answered, setAnswered] = useState<null | boolean>(null);
 
@@ -580,15 +593,13 @@ function ClozeCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
     setResult({ ok, q: ratio === 1 ? 5 : ratio >= 0.6 ? 4 : 1 });
   }
 
-  let bi = -1;
   return (
     <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
       <div className="text-xs font-medium text-ink-3">Complète le passage</div>
       <p className="text-lg leading-loose">
         {tokens.map((tk, i) => {
           if (tk.type === "text") return <span key={i}>{tk.value}</span>;
-          bi += 1;
-          const j = bi;
+          const j = tokens.slice(0, i).filter((t) => t.type === "blank").length;
           const state = result ? (result.ok[j] ? "ok" : "bad") : "idle";
           return (
             <input

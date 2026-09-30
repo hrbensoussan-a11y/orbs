@@ -25,7 +25,10 @@ export function Pomodoro({
   const [cycles, setCycles] = useState(0);
   const endAtRef = useRef(0);
   const onFocusRef = useRef(onFocus);
-  onFocusRef.current = onFocus;
+
+  useEffect(() => {
+    onFocusRef.current = onFocus;
+  }, [onFocus]);
 
   function setPhase(p: "work" | "break") {
     phaseRef.current = p;
