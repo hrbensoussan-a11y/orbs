@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import {
   Sparkles,
   Send,
+  Square,
   Plus,
   Trash2,
   Copy,
@@ -85,6 +86,7 @@ export function AiChat({
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Chargement initial depuis localStorage (client uniquement). Ce state ne
   // peut PAS être calculé au rendu : localStorage n'existe pas côté serveur,
@@ -98,28 +100,52 @@ export function AiChat({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  // Sauvegarde à chaque changement (après le chargement initial).
-  useEffect(() => {
-    if (!loaded) return;
+  const persist = useCallback((convs: Conversation[]) => {
     try {
-      localStorage.setItem(
-        STORE_KEY,
-        JSON.stringify({ version: 1, conversations }),
-      );
+      localStorage.setItem(STORE_KEY, JSON.stringify({ version: 1, conversations: convs }));
     } catch {
       /* quota plein / mode privé : on ignore, l'app continue de fonctionner */
     }
-  }, [conversations, loaded]);
+  }, []);
+
+  // Sauvegarde : immédiate hors streaming ; throttle pendant le streaming
+  // (la bulle change toutes les 60 ms). Quand le tour se termine, `loading`
+  // repasse à false et on enregistre aussitôt l'état final — rien n'est perdu
+  // même si on recharge juste après.
+  useEffect(() => {
+    if (!loaded) return;
+    const id = setTimeout(() => persist(conversations), loading ? 500 : 0);
+    return () => clearTimeout(id);
+  }, [conversations, loaded, loading, persist]);
+
+  // Filet de sécurité : si l'onglet est fermé/masqué, on écrit tout de suite.
+  useEffect(() => {
+    const flush = () => persist(conversations);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flush);
+    };
+  }, [conversations, persist]);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   );
 
-  // Défilement automatique vers le bas quand la conversation évolue.
+  // Défilement automatique : suit le texte qui se génère, mais uniquement si
+  // l'utilisateur est déjà proche du bas (sinon on ne le dérange pas s'il
+  // remonte lire un message précédent).
+  const lastLen =
+    active?.messages[active.messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [active?.messages.length, loading]);
+    const el = endRef.current;
+    if (!el) return;
+    const nearBottom =
+      window.innerHeight + window.scrollY >= document.body.offsetHeight - 220;
+    if (nearBottom) el.scrollIntoView({ block: "end" });
+  }, [active?.messages.length, lastLen, loading]);
 
   const updateActive = useCallback(
     (mutate: (c: Conversation) => Conversation, id?: string) => {
@@ -179,15 +205,21 @@ export function AiChat({
       baseMessages = conversations.find((c) => c.id === convId)?.messages ?? [];
     }
 
-    const userMsg: ChatMessage = { role: "user", content: clean };
+    // On ajoute d'un coup le message de l'élève ET une bulle assistant vide,
+    // qu'on remplit ensuite au fur et à mesure que le texte arrive.
     updateActive(
       (c) => ({
         ...c,
         title: c.title || clean.slice(0, 42),
-        messages: [...c.messages, userMsg],
+        messages: [
+          ...c.messages,
+          { role: "user", content: clean },
+          { role: "assistant", content: "" },
+        ],
       }),
       convId,
     );
+    const assistantIndex = baseMessages.length + 1;
 
     setInput("");
     setPendingAction(null);
@@ -196,36 +228,102 @@ export function AiChat({
     setLoading(true);
 
     const history = baseMessages.slice(-MAX_HISTORY);
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    let acc = "";
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const writeInto = (content: string) =>
+      updateActive((c) => {
+        const msgs = c.messages.slice();
+        if (msgs[assistantIndex]?.role === "assistant")
+          msgs[assistantIndex] = { role: "assistant", content };
+        return { ...c, messages: msgs };
+      }, convId);
+    // On n'écrit dans le state qu'au plus toutes les 60 ms (fluide, sans
+    // re-rendre le Markdown à chaque lettre).
+    const scheduleFlush = () => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        writeInto(acc);
+      }, 60);
+    };
+    const removeEmptyPlaceholder = () =>
+      updateActive((c) => {
+        const msgs = c.messages.slice();
+        if (msgs[assistantIndex]?.role === "assistant" && !msgs[assistantIndex].content)
+          msgs.splice(assistantIndex, 1);
+        return { ...c, messages: msgs };
+      }, convId);
 
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: clean, history, action: action ?? undefined }),
+        signal: ac.signal,
       });
-      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        removeEmptyPlaceholder();
         setError(
           data?.message ??
             "L'IA est indisponible pour le moment. Réessaie dans un instant.",
         );
         setRetry({ text: clean, action });
-      } else if (data?.reply) {
-        updateActive(
-          (c) => ({ ...c, messages: [...c.messages, { role: "assistant", content: data.reply }] }),
-          convId,
-        );
-      } else {
-        setError("Réponse vide de l'IA. Réessaie.");
+        return;
+      }
+      // Lecture du flux : on ajoute le texte au fur et à mesure.
+      if (res.body) {
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          acc += dec.decode(value, { stream: true });
+          scheduleFlush();
+        }
+      }
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      writeInto(acc);
+
+      if (!acc.trim()) {
+        removeEmptyPlaceholder();
+        setError("L’IA n’a pas renvoyé de réponse. Réessaie.");
         setRetry({ text: clean, action });
       }
-    } catch {
-      setError("Connexion impossible. Vérifie ta connexion internet et réessaie.");
-      setRetry({ text: clean, action });
+    } catch (err) {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      writeInto(acc); // on garde le texte déjà reçu
+      const aborted =
+        err instanceof DOMException
+          ? err.name === "AbortError"
+          : (err as { name?: string })?.name === "AbortError";
+      if (aborted) {
+        // Arrêt volontaire : on garde le partiel, pas de message d'erreur.
+        if (!acc.trim()) removeEmptyPlaceholder();
+      } else {
+        if (!acc.trim()) removeEmptyPlaceholder();
+        setError("Connexion interrompue. Réessaie dans un instant.");
+        setRetry({ text: clean, action });
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 30);
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   function onQuickAction(a: { action: QuickAction; starter: string }) {
@@ -401,36 +499,36 @@ export function AiChat({
               ) : (
                 <div key={i} className="mr-auto max-w-[92%] group">
                   <div className="card px-4 py-1">
-                    <Markdown>{m.content}</Markdown>
-                  </div>
-                  <button
-                    className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
-                    onClick={() => copyMessage(m.content, i)}
-                    aria-label="Copier la réponse"
-                  >
-                    {copiedIdx === i ? (
-                      <>
-                        <Check size={13} aria-hidden /> Copié
-                      </>
+                    {m.content ? (
+                      <Markdown>{m.content}</Markdown>
                     ) : (
-                      <>
-                        <Copy size={13} aria-hidden /> Copier
-                      </>
+                      // Bulle en cours : « l'IA réfléchit » tant qu'aucun mot n'est arrivé.
+                      <div className="inline-flex items-center gap-1.5 py-3">
+                        <span className="ai-dot" />
+                        <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
+                        <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
+                      </div>
                     )}
-                  </button>
+                  </div>
+                  {m.content && (
+                    <button
+                      className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
+                      onClick={() => copyMessage(m.content, i)}
+                      aria-label="Copier la réponse"
+                    >
+                      {copiedIdx === i ? (
+                        <>
+                          <Check size={13} aria-hidden /> Copié
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={13} aria-hidden /> Copier
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               ),
-            )}
-
-            {/* État « réflexion » */}
-            {loading && (
-              <div className="mr-auto max-w-[92%]">
-                <div className="card px-4 py-3 inline-flex items-center gap-1.5">
-                  <span className="ai-dot" />
-                  <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
-                  <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
-                </div>
-              </div>
             )}
 
             {/* Erreur */}
@@ -490,14 +588,24 @@ export function AiChat({
             onKeyDown={onKeyDown}
             aria-label="Votre message"
           />
-          <button
-            className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]"
-            onClick={() => send(input, pendingAction)}
-            disabled={!configured || loading || !input.trim()}
-            aria-label="Envoyer"
-          >
-            <Send size={18} aria-hidden />
-          </button>
+          {loading ? (
+            <button
+              className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]"
+              onClick={stop}
+              aria-label="Arrêter la génération"
+            >
+              <Square size={16} aria-hidden fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]"
+              onClick={() => send(input, pendingAction)}
+              disabled={!configured || !input.trim()}
+              aria-label="Envoyer"
+            >
+              <Send size={18} aria-hidden />
+            </button>
+          )}
         </div>
       </div>
     </div>

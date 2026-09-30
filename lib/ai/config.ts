@@ -41,7 +41,10 @@ export const AI_CONFIG = {
   reasoningEffort: effort(),
 
   // --- Limites de coût / taille ---
-  maxCompletionTokens: num("OPENAI_MAX_COMPLETION_TOKENS", 900),
+  // Les modèles de raisonnement consomment une partie de ce budget en
+  // « réflexion » : trop bas => réponse coupée, voire vide. 1400 laisse de
+  // la marge pour une vraie explication.
+  maxCompletionTokens: num("OPENAI_MAX_COMPLETION_TOKENS", 1400),
   maxMessageChars: num("AI_MAX_MESSAGE_CHARS", 4000),
   maxContextChars: num("AI_MAX_CONTEXT_CHARS", 6000),
   maxHistoryMessages: num("AI_MAX_HISTORY_MESSAGES", 10),

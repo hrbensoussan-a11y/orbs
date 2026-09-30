@@ -13,11 +13,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { buildSystemPrompt, buildContextBlock } from "@/lib/ai/persona";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
-import { callOpenAI, AiError } from "@/lib/ai/openai";
+import { streamChatCompletion, AiError } from "@/lib/ai/openai";
 import type { ChatMessage } from "@/lib/ai/types";
 
 // Runtime Node (nécessaire pour Prisma via getCurrentUser + fetch sortant).
 export const runtime = "nodejs";
+// La réponse est un flux : on autorise jusqu'à 60 s de génération.
+export const maxDuration = 60;
 
 const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -109,14 +111,18 @@ export async function POST(request: NextRequest) {
   const userContent = contextBlock ? `${contextBlock}\n\n---\n\n${message}` : message;
   messages.push({ role: "user", content: userContent });
 
-  // 6) Appel OpenAI + gestion d'erreurs propre.
+  // 6) Appel OpenAI en streaming. Les erreurs AVANT le flux (auth upstream,
+  //    réseau, timeout) reviennent en JSON avec le bon code HTTP ; une fois le
+  //    flux commencé (200), le texte arrive au fur et à mesure.
   try {
-    const result = await callOpenAI(system, messages);
-    // 7) On ne renvoie que le nécessaire (pas de secret).
-    return NextResponse.json({
-      reply: result.reply,
-      model: AI_CONFIG.model,
-      usage: result.usage,
+    const stream = await streamChatCompletion(system, messages);
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no", // pas de mise en tampon (nginx & co)
+      },
     });
   } catch (err) {
     if (err instanceof AiError) {
