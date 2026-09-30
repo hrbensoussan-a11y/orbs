@@ -56,13 +56,12 @@ export function StudySession({
   const [wrong, setWrong] = useState(0);
   const missedRef = useRef<Map<string, Card>>(new Map());
   const startRef = useRef(0);
-  const xpStartRef = useRef(0);
+  const xpStartRef = useRef(ctx.s.stats.xp);
   const [rewards, setRewards] = useState<Rewards | null>(null);
 
   useEffect(() => {
     startRef.current = Date.now();
-    xpStartRef.current = ctx.s.stats.xp;
-  }, [ctx.s.stats.xp]);
+  }, []);
 
   const pool = useMemo(() => deck.cards.map((c) => c.d).filter(Boolean), [deck]);
 
@@ -369,16 +368,11 @@ function WriteCard({ card, onAnswer }: { card: Card; onAnswer: (ok: boolean) => 
 function TrueFalse({ card, pool, onAnswer }: { card: Card; pool: string[]; onAnswer: (ok: boolean) => void }) {
   const { shownDef, isReal } = useMemo(() => {
     const others = pool.filter((d) => d !== card.d);
-    // Deterministic pseudo-random based on card ID for stable randomization per card
-    let hash = 0;
-    for (let i = 0; i < card.id.length; i++) {
-      hash = ((hash << 5) - hash) + card.id.charCodeAt(i);
-      hash = hash & hash;
-    }
-    const pseudoRandom = ((hash >>> 0) % 1000) / 1000;
-    const real = pseudoRandom < 0.5 || others.length === 0;
-    const selectedIdx = Math.floor((pseudoRandom * 10007) % others.length) || 0;
-    return { shownDef: real ? card.d : others[selectedIdx], isReal: real };
+    // Tirage au sort voulu : refait uniquement quand la carte change.
+    /* eslint-disable react-hooks/purity */
+    const real = Math.random() < 0.5 || others.length === 0;
+    return { shownDef: real ? card.d : others[Math.floor(Math.random() * others.length)], isReal: real };
+    /* eslint-enable react-hooks/purity */
   }, [card, pool]);
   const [answered, setAnswered] = useState<null | boolean>(null);
 

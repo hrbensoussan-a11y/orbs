@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useReducer,
   useRef,
   useState,
@@ -56,8 +57,15 @@ type View =
   | { name: "study"; deckId: string; mode: Mode };
 
 export function LearnApp() {
-  const [state] = useState<State | null>(load);
+  // Les paquets vivent dans localStorage (absent côté serveur) : on les charge après
+  // l'affichage initial, sinon la page ne correspondrait pas au HTML du serveur.
+  const [state, setState] = useState<State | null>(null);
   const [, force] = useReducer((x) => x + 1, 0);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState(load());
+  }, []);
 
   const save = useCallback(() => {
     if (state) storeSave(state);
