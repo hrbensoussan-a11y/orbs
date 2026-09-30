@@ -1,14 +1,10 @@
-import { Sparkles } from "lucide-react";
-import { ComingSoon } from "@/components/ComingSoon";
+import { requireUser } from "@/lib/auth";
+import { aiConfigured } from "@/lib/ai/config";
+import { AiChat } from "@/components/ai/AiChat";
 
-export default function IaPage() {
-  return (
-    <ComingSoon
-      Icon={Sparkles}
-      tone="sky"
-      title="Mode IA"
-      description="Pose tes questions à partir de ta scolarité : aide sur un devoir d’anglais, explication d’un cours, ou rédiger un message à un professeur."
-      note="Développé par l’équipe IA."
-    />
-  );
+export default async function IaPage() {
+  const user = await requireUser();
+  // `aiConfigured()` ne lit que la présence de la clé côté serveur : la clé
+  // elle-même n'est jamais transmise au navigateur.
+  return <AiChat firstName={user.firstName} configured={aiConfigured()} />;
 }

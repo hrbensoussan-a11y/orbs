@@ -407,3 +407,8 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 @media (prefers-reduced-motion: reduce) {
   svg.av-live .av-body, svg.av-live .av-eyes, svg.av-live .av-wavehand { animation: none; }
 }
+
+/* Indicateur « l'IA réfléchit » (trois points qui pulsent) */
+@keyframes aiDot { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sky); display: inline-block; animation: aiDot 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ai-dot { animation: none; opacity: 0.6; } }

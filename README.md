@@ -6,9 +6,9 @@ Assistant scolaire pour élève, en un seul endroit : **scolarité** (Pronote /
 (voir [`direction-artistique.md`](./direction-artistique.md)).
 
 > État actuel : le **shell** (accueil + navigation) et le **journal** sont en
-> place et **fonctionnels**. Les modules **Apprendre / IA / Agenda** sont des
-> écrans **de préparation** (non fonctionnels). La **scolarité** (Pronote) et
-> l'**IA** sont portées par l'équipe IA.
+> place et **fonctionnels**, ainsi que **Apprendre**, **Journal** et le
+> **mode IA** (assistant OpenAI). Le module **Agenda** et la **scolarité**
+> (Pronote) restent en préparation.
 
 ## Stack
 
@@ -33,7 +33,7 @@ npm run dev                  # http://localhost:3000
 | --- | --- | --- |
 | Menu (accueil) | `/accueil` | Maquette (données scolarité = équipe Pronote) |
 | Apprendre | `/apprendre` | **Fonctionnel** (5 types de fiches) |
-| IA | `/ia` | En préparation (équipe IA) |
+| IA | `/ia` | **Fonctionnel** (assistant OpenAI, clé serveur requise) |
 | Journal | `/timeline` | **Fonctionnel** |
 | Agenda | `/agenda` | En préparation |
 
@@ -69,6 +69,34 @@ Moteur de révision **local** (localStorage, aucun compte/serveur), style DA.
   édition en un tap, suppression confirmée
 - Recherche plein texte + filtres (humeur, tag, période)
 - **Export libre** (JSON + Markdown)
+
+## Le module IA (assistant scolaire, fonctionnel)
+
+Assistant de conversation branché sur **OpenAI**. Architecture :
+**navigateur → notre backend `/api/ai/chat` → OpenAI → réponse → navigateur**.
+La clé API reste **uniquement côté serveur** (jamais dans le HTML/JS ni dans Git).
+
+- Frontend : `components/ai/AiChat.tsx` (rendu par `app/(app)/ia/page.tsx`).
+  Conversation, historique en `localStorage`, nouvelle conversation, suppression,
+  copie, rendu Markdown, actions rapides, états « réflexion » et erreurs.
+- Backend : `app/api/ai/chat/route.ts` (auth requise, validation `zod`,
+  limitation de débit par utilisateur, timeout, erreurs propres).
+- Logique isolée dans `lib/ai/` : `config.ts` (variables d'env), `persona.ts`
+  (personnalité + contexte), `openai.ts` (appel), `ratelimit.ts`, `types.ts`.
+
+### Configuration
+
+Dans `.env` (voir `.env.example` pour toutes les options) :
+
+```bash
+OPENAI_API_KEY="sk-..."       # SECRET, côté serveur uniquement
+OPENAI_MODEL="gpt-5.6-terra"  # changer de modèle = changer cette ligne
+```
+
+Sans clé, l'IA s'affiche comme « non configurée » et **le reste d'Orbs
+fonctionne normalement**. Le modèle utilisé est un modèle de raisonnement
+(Chat Completions, `max_completion_tokens` + `reasoning_effort`, sans
+`temperature`).
 
 ## Direction artistique
 
