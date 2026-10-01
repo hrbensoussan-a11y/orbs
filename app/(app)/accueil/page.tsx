@@ -11,10 +11,12 @@ import {
   Clock,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { AppearanceButton } from "@/components/AppearanceButton";
 import { Avatar } from "@/components/avatar/Avatar";
 import { FamilyCorner } from "@/components/family/StudentFamily";
 import { MoyenneCard } from "@/components/notes/MoyenneCard";
+import { RappelsCard } from "@/components/home/RappelsCard";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,14 @@ export default async function AccueilPage() {
   const user = await requireUser();
   const name = user.name?.trim() || user.email.split("@")[0];
 
+  // A-t-on écrit une page de journal aujourd'hui ? (pour le rappel)
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const wroteToday =
+    (await prisma.entry.count({
+      where: { userId: user.id, createdAt: { gte: startOfDay } },
+    })) > 0;
+
   return (
     <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)]">
       {/* Barre profil */}
@@ -83,6 +93,9 @@ export default async function AccueilPage() {
 
       <div className="stagger flex flex-col gap-4">
         <FamilyCorner userId={user.id} />
+
+        {/* Rappels du jour (révisions + devoirs + journal) */}
+        <RappelsCard wroteToday={wroteToday} />
 
         {/* Tuiles scolarité (aperçu) */}
         <div className="grid grid-cols-2 gap-3.5">
