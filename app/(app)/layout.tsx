@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { requireUser } from "@/lib/auth";
+import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BottomNav } from "@/components/BottomNav";
 import { FONT_SIZES } from "@/lib/constants";
@@ -9,7 +9,7 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await requireUser();
+  const user = await requireStudent();
   const settings = await prisma.settings.findUnique({
     where: { userId: user.id },
   });

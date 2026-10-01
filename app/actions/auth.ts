@@ -10,7 +10,7 @@ export type AuthState =
   | {
       error?: string;
       fieldErrors?: Record<string, string[]>;
-      values?: { name?: string; email?: string };
+      values?: { name?: string; email?: string; role?: string };
     }
   | undefined;
 
@@ -20,10 +20,11 @@ export async function signup(
 ): Promise<AuthState> {
   const raw = {
     name: (formData.get("name") as string | null)?.trim() || undefined,
+    role: (formData.get("role") as string | null) || undefined,
     email: (formData.get("email") as string | null) ?? "",
     password: (formData.get("password") as string | null) ?? "",
   };
-  const values = { name: raw.name, email: String(raw.email) };
+  const values = { name: raw.name, email: String(raw.email), role: raw.role };
 
   const parsed = SignupSchema.safeParse(raw);
   if (!parsed.success) {
@@ -42,12 +43,13 @@ export async function signup(
       email,
       name: parsed.data.name ?? null,
       passwordHash,
+      role: parsed.data.role,
       settings: { create: {} },
     },
   });
 
   await createSession(user.id);
-  redirect("/timeline");
+  redirect(user.role === "parent" ? "/parent" : "/timeline");
 }
 
 export async function login(
@@ -81,7 +83,7 @@ export async function login(
   if (!ok) return { error: genericError, values };
 
   await createSession(user.id);
-  redirect("/timeline");
+  redirect(user.role === "parent" ? "/parent" : "/timeline");
 }
 
 export async function logout(): Promise<void> {

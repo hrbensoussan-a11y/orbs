@@ -13,6 +13,7 @@ import {
 import { requireUser } from "@/lib/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
 import { Avatar } from "@/components/avatar/Avatar";
+import { FamilyCorner } from "@/components/family/StudentFamily";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,8 @@ export default async function AccueilPage() {
       </div>
 
       <div className="stagger flex flex-col gap-4">
+        <FamilyCorner userId={user.id} />
+
         {/* Tuiles scolarité (aperçu) */}
         <div className="grid grid-cols-2 gap-3.5">
           {TILES.map((t) => (

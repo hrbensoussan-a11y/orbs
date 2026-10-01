@@ -44,6 +44,8 @@ import {
   decodeDeckShare,
   deckFromShare,
 } from "@/lib/learn/share";
+import { summarize } from "@/lib/learn/summary";
+import { syncLearnSummary } from "@/app/actions/family";
 import type { LearnCtx } from "./ctx";
 import { CreateDeck } from "./CreateDeck";
 import { StudyPicker, type Mode } from "./StudyPicker";
@@ -56,6 +58,15 @@ type View =
   | { name: "pick"; deckId: string }
   | { name: "study"; deckId: string; mode: Mode };
 
+// Envoie un résumé (compteurs seulement) à l'espace famille, sans bloquer.
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSync(delay: number, s: State) {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncLearnSummary(summarize(s)).catch(() => {});
+  }, delay);
+}
+
 export function LearnApp() {
   // Les paquets vivent dans localStorage (absent côté serveur) : on les charge après
   // l'affichage initial, sinon la page ne correspondrait pas au HTML du serveur.
@@ -63,12 +74,17 @@ export function LearnApp() {
   const [, force] = useReducer((x) => x + 1, 0);
 
   useEffect(() => {
+    const s = load();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState(load());
+    setState(s);
+    scheduleSync(500, s);
   }, []);
 
   const save = useCallback(() => {
-    if (state) storeSave(state);
+    if (state) {
+      storeSave(state);
+      scheduleSync(1500, state);
+    }
     force();
   }, [state]);
 
@@ -89,10 +105,9 @@ export function LearnApp() {
     state.stats.focus += 1;
     award(state, "focus"); // XP + jour + série
     recomputeBadges(state);
-    storeSave(state);
-    force();
+    save();
     flash("Session de concentration validée ✓");
-  }, [state, flash]);
+  }, [state, save, flash]);
 
   if (!state) {
     return (

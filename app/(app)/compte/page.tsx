@@ -5,6 +5,7 @@ import { logout } from "@/app/actions/auth";
 import { parseAvatar } from "@/lib/avatar/config";
 import { AvatarCard } from "@/components/avatar/AvatarCard";
 import { AccountForm } from "@/components/AccountForm";
+import { FamilySettings } from "@/components/family/FamilySettings";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,8 @@ export default async function ComptePage() {
           }}
         />
       </section>
+
+      <FamilySettings userId={user.id} />
 
       {/* Compte */}
       <section className="card p-5">

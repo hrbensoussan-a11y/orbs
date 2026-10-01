@@ -4,6 +4,7 @@ import { z } from "zod";
 
 export const SignupSchema = z.object({
   name: z.string().trim().max(80).optional(),
+  role: z.enum(["student", "parent"]).default("student"),
   email: z.email({ error: "Adresse e-mail invalide." }),
   password: z
     .string()
