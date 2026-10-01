@@ -14,6 +14,7 @@ import { requireUser } from "@/lib/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
 import { Avatar } from "@/components/avatar/Avatar";
 import { FamilyCorner } from "@/components/family/StudentFamily";
+import { MoyenneCard } from "@/components/notes/MoyenneCard";
 
 export const dynamic = "force-dynamic";
 
@@ -54,32 +55,6 @@ const TONE: Record<string, string> = {
   sky: "var(--sky)",
   lilac: "var(--lilac)",
 };
-
-function Sparkline() {
-  // Petit graphe de démonstration (moyenne dans le temps).
-  const pts = [8, 12, 9, 14, 11, 13, 10, 12, 11, 9, 12, 14, 13, 15, 14, 16, 15, 17];
-  const w = 150, h = 56, max = 20, min = 6;
-  const step = w / (pts.length - 1);
-  const y = (v: number) => h - ((v - min) / (max - min)) * h;
-  const line = pts.map((v, i) => `${i * step},${y(v).toFixed(1)}`).join(" ");
-  const area = `0,${h} ${line} ${w},${h}`;
-  const lastX = (pts.length - 1) * step;
-  const lastY = y(pts[pts.length - 1]);
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="150" height="56" aria-hidden>
-      <defs>
-        <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--green)" stopOpacity="0.28" />
-          <stop offset="100%" stopColor="var(--green)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={area} fill="url(#spark)" />
-      <polyline points={line} fill="none" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r="4.5" fill="var(--green)" />
-      <circle cx={lastX} cy={lastY} r="9" fill="var(--green)" fillOpacity="0.18" />
-    </svg>
-  );
-}
 
 export default async function AccueilPage() {
   const user = await requireUser();
@@ -167,31 +142,14 @@ export default async function AccueilPage() {
           </div>
         </section>
 
-        {/* Moyenne */}
-        <section className="card p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">Moyenne</h2>
-            <span className="chip">Afficher plus</span>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <Sparkline />
-            <div className="text-right">
-              <p className="leading-none">
-                <span className="display text-4xl font-semibold text-green-ink">15,53</span>
-                <span className="text-ink-3 text-lg"> /20</span>
-              </p>
-              <p className="font-semibold mt-1 flex items-center justify-end gap-1">
-                Moyenne des matières <ChevronDown size={16} className="text-ink-3" aria-hidden />
-              </p>
-              <p className="text-sm text-ink-3">par l’établissement</p>
-            </div>
-          </div>
-        </section>
+        {/* Mes notes (réel — saisies à la main) */}
+        <MoyenneCard />
 
         {/* Note honnête */}
         <p className="text-center text-xs text-ink-3 px-6">
-          Aperçu de l’accueil. La scolarité (Pronote / École Directe) sera branchée
-          par l’équipe. Le journal, lui, fonctionne déjà.
+          Aperçu de l’accueil : les cours et tuiles ci-dessus sont une maquette
+          (la scolarité Pronote sera branchée par l’équipe). Tes notes, ton
+          agenda, tes révisions et ton journal, eux, fonctionnent déjà.
         </p>
       </div>
     </div>
