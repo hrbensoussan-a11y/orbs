@@ -15,6 +15,35 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       {isRegister && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-sm text-muted mb-1.5">Je suis…</legend>
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className="role-tile">
+              <input
+                type="radio"
+                name="role"
+                value="student"
+                defaultChecked={state?.values?.role !== "parent"}
+                className="sr-only"
+              />
+              <span className="text-2xl" aria-hidden>🎒</span>
+              <span className="font-semibold">Élève</span>
+            </label>
+            <label className="role-tile">
+              <input
+                type="radio"
+                name="role"
+                value="parent"
+                defaultChecked={state?.values?.role === "parent"}
+                className="sr-only"
+              />
+              <span className="text-2xl" aria-hidden>🏡</span>
+              <span className="font-semibold">Parent</span>
+            </label>
+          </div>
+        </fieldset>
+      )}
+      {isRegister && (
         <Field label="Prénom ou pseudo (optionnel)">
           <input
             name="name"

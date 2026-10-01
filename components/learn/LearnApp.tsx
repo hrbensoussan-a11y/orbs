@@ -44,6 +44,8 @@ import {
   decodeDeckShare,
   deckFromShare,
 } from "@/lib/learn/share";
+import { summarize } from "@/lib/learn/summary";
+import { syncLearnSummary } from "@/app/actions/family";
 import type { LearnCtx } from "./ctx";
 import { CreateDeck } from "./CreateDeck";
 import { StudyPicker, type Mode } from "./StudyPicker";
@@ -61,15 +63,26 @@ export function LearnApp() {
   const [, force] = useReducer((x) => x + 1, 0);
   const [ready, setReady] = useState(false);
 
+  // Envoie un résumé (compteurs seulement) à l'espace famille, sans bloquer.
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleSync = useCallback((delay: number) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      if (ref.current) syncLearnSummary(summarize(ref.current)).catch(() => {});
+    }, delay);
+  }, []);
+
   useEffect(() => {
     ref.current = load();
     setReady(true);
-  }, []);
+    scheduleSync(500);
+  }, [scheduleSync]);
 
   const save = useCallback(() => {
     if (ref.current) storeSave(ref.current);
     force();
-  }, []);
+    scheduleSync(1500);
+  }, [scheduleSync]);
 
   const [view, setView] = useState<View>({ name: "home" });
   const [pomo, setPomo] = useState(false);

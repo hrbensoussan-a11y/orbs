@@ -31,9 +31,71 @@ model User {
   school      String? // établissement
   avatar      String? // configuration de l'avatar (JSON)
 
+  // Espace famille
+  role              String    @default("student") // "student" | "parent"
+  familyCode        String?   @unique // code d'invitation temporaire (élève)
+  familyCodeExpires DateTime?
+  shareMood         Boolean   @default(false) // l'élève partage son humeur du journal
+  learnSnapshot     String? // résumé JSON de la progression Apprendre (synchro locale -> serveur)
+  learnSyncedAt     DateTime?
+
   entries  Entry[]
   tags     Tag[]
   settings Settings?
+
+  children        FamilyLink[] @relation("ParentLinks")
+  parents         FamilyLink[] @relation("ChildLinks")
+  cheersSent      Cheer[]      @relation("CheerFrom")
+  cheersReceived  Cheer[]      @relation("CheerTo")
+  challengesSet   Challenge[]  @relation("ChallengeFrom")
+  challengesToDo  Challenge[]  @relation("ChallengeTo")
+}
+
+/// Lien parent <-> élève (créé quand le parent saisit le code famille).
+model FamilyLink {
+  id        String   @id @default(cuid())
+  parentId  String
+  parent    User     @relation("ParentLinks", fields: [parentId], references: [id], onDelete: Cascade)
+  childId   String
+  child     User     @relation("ChildLinks", fields: [childId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([parentId, childId])
+  @@index([childId])
+}
+
+/// Encouragement envoyé par un parent (sticker + petit mot).
+model Cheer {
+  id        String    @id @default(cuid())
+  fromId    String
+  from      User      @relation("CheerFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User      @relation("CheerTo", fields: [toId], references: [id], onDelete: Cascade)
+  sticker   String // emoji
+  message   String?
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@index([toId, createdAt])
+}
+
+/// Défi lancé par un parent, avec une récompense promise.
+model Challenge {
+  id          String    @id @default(cuid())
+  fromId      String
+  from        User      @relation("ChallengeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String
+  to          User      @relation("ChallengeTo", fields: [toId], references: [id], onDelete: Cascade)
+  kind        String // "streak" | "reviews" | "mastered" | "focus" | "journal"
+  target      Int
+  baseline    Int       @default(0) // valeur au lancement (défis cumulatifs)
+  reward      String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  cancelled   Boolean   @default(false)
+
+  @@index([toId, createdAt])
+  @@index([fromId, createdAt])
 }
 
 /// Préférences par utilisateur.

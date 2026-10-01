@@ -43,6 +43,8 @@ export type CurrentUser = {
   schoolClass: string | null;
   school: string | null;
   avatar: string | null;
+  role: string;
+  shareMood: boolean;
 };
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
@@ -59,6 +61,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       schoolClass: true,
       school: true,
       avatar: true,
+      role: true,
+      shareMood: true,
     },
   });
   return user;
@@ -68,5 +72,19 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/** Pages élève : un parent est renvoyé vers son espace. */
+export async function requireStudent(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (user.role === "parent") redirect("/parent");
+  return user;
+}
+
+/** Pages parent : un élève est renvoyé vers son accueil. */
+export async function requireParent(): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (user.role !== "parent") redirect("/accueil");
   return user;
 }

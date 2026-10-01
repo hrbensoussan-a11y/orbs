@@ -70,6 +70,28 @@ Moteur de révision **local** (localStorage, aucun compte/serveur), style DA.
 - Recherche plein texte + filtres (humeur, tag, période)
 - **Export libre** (JSON + Markdown)
 
+## L'espace famille (fonctionnel)
+
+- À l'inscription : **Élève** ou **Parent**. Un parent arrive sur `/parent`
+  (sans la barre élève) ; un élève ne peut pas ouvrir `/parent`.
+- **Liaison** : l'élève génère un **code famille** (6 caractères, 24 h, usage
+  unique) dans *Mon compte → Espace famille* ; le parent le saisit. L'élève voit
+  ses parents liés et peut en retirer un.
+- **Fiche de l'enfant** (`/parent/[id]`) : avatar dans un anneau d'XP + niveau,
+  série 🔥, actions de la semaine, cartes maîtrisées, **jardin** des 14 derniers
+  jours (une plante qui pousse selon l'activité), matières, **collection de
+  badges**, pages de journal écrites.
+- **Défis** lancés par le parent (série, cartes révisées/maîtrisées,
+  concentration, journal) avec une **récompense promise** ; progression
+  calculée côté serveur, trophée + confettis quand c'est réussi.
+- **Encouragements** : stickers + petit mot, affichés sur l'accueil de l'élève
+  (« Merci ! » les marque comme vus ; le parent voit « 👀 vu »).
+- **Vie privée** : le contenu du journal n'est **jamais** partagé (seulement le
+  nombre de pages). L'humeur n'est visible que si l'élève l'active.
+- La progression Apprendre reste locale, mais un **résumé chiffré** (XP, série,
+  badges, nombre de cartes par paquet — jamais le contenu des fiches) est
+  synchronisé vers le serveur à chaque sauvegarde (`User.learnSnapshot`).
+
 ## Direction artistique
 
 Le contrat visuel complet est dans [`direction-artistique.md`](./direction-artistique.md).
@@ -79,8 +101,9 @@ vignette ; surfaces en verre dépoli ; vert `#38C172` en couleur primaire.
 
 ## Modèle de données
 
-`prisma/schema.prisma` — `User`, `Settings`, `Entry` (contenu, humeur, tags,
-lieu, favori/épinglé, verrou, trackers…), `Tag`, `MediaAttachment`.
+`prisma/schema.prisma` — `User` (+ rôle, code famille, résumé Apprendre),
+`Settings`, `Entry` (contenu, humeur, tags, lieu, favori/épinglé, verrou,
+trackers…), `Tag`, `MediaAttachment`, `FamilyLink`, `Cheer`, `Challenge`.
 
 ## Sécurité — état et suite
 
