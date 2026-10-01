@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ArrowLeft, Trash2, Plus, Zap, Camera, X } from "lucide-react";
+import { ArrowLeft, Trash2, Plus, Zap, Camera, X, Sparkles } from "lucide-react";
 import type { Kind } from "@/lib/learn/types";
 import { KIND_META, SUBJECTS } from "@/lib/learn/types";
 import { createDeck, updateDeck } from "@/lib/learn/store";
@@ -64,6 +64,10 @@ export function CreateDeck({
   const [photo, setPhoto] = useState<string | null>(null);
   const photoInput = useRef<HTMLInputElement | null>(null);
 
+  // Génération par l'IA (à partir du cours collé).
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const meta = KIND_META[kind];
   const isDefLike = kind === "definitions" || kind === "questions";
   const isTextItems = kind === "memorize" || kind === "order";
@@ -89,6 +93,44 @@ export function CreateDeck({
     if (photo) URL.revokeObjectURL(photo);
     setPhoto(URL.createObjectURL(f));
     e.target.value = "";
+  }
+
+  // ---- Génération des cartes par l'IA (def/questions) ----
+  async function generateWithAI() {
+    const text = paste.trim();
+    if (text.length < 20 || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    setPasteInfo(null);
+    try {
+      const res = await fetch("/api/ai/cards", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, kind, subject }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.cards?.length) {
+        setAiError(
+          data?.message ||
+            "L'IA n'a pas pu créer de cartes. Réessaie ou colle un texte plus clair.",
+        );
+        return;
+      }
+      const made: Row[] = data.cards.map((c: Row) => ({
+        t: String(c.t || "").trim(),
+        d: String(c.d || "").trim(),
+      }));
+      const existing = rows.filter((r) => r.t.trim() || r.d.trim());
+      setRows([...existing, ...made]);
+      setPaste("");
+      setPasteInfo(
+        `✨ ${made.length} carte${made.length > 1 ? "s" : ""} créée${made.length > 1 ? "s" : ""} par l'IA — relis-les avant d'enregistrer.`,
+      );
+    } catch {
+      setAiError("Connexion impossible. Vérifie ta connexion et réessaie.");
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   // ---- Pairs à enregistrer selon le type ----
@@ -185,7 +227,8 @@ export function CreateDeck({
                 <input ref={photoInput} type="file" accept="image/*" hidden onChange={onPhoto} />
               </div>
               <p className="text-sm text-ink-2 mt-1 mb-3">
-                Une ligne par carte. Le séparateur est détecté tout seul.
+                Colle ton cours : l’IA en fait des cartes toute seule. Ou écris
+                une ligne par carte et découpe toi-même.
               </p>
               {photo && (
                 <div className="mb-3">
@@ -205,14 +248,44 @@ export function CreateDeck({
                 onChange={(e) => setPaste(e.target.value)}
                 placeholder={"mot : définition\nautre mot : sa définition\nterme — explication"}
               />
-              <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button
+                className="btn-primary w-full !py-2.5 mt-1"
+                onClick={generateWithAI}
+                disabled={paste.trim().length < 20 || aiLoading}
+              >
+                {aiLoading ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="ai-dot" />
+                    <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
+                    <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
+                    <span className="ml-1">L’IA crée tes cartes…</span>
+                  </span>
+                ) : (
+                  <>
+                    <Sparkles size={16} aria-hidden /> Générer les cartes avec l’IA
+                  </>
+                )}
+              </button>
+              {aiError && (
+                <p className="text-sm mt-2" style={{ color: "var(--coral)" }} role="alert">
+                  {aiError}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3 my-3 text-xs text-ink-3">
+                <span className="h-px flex-1 bg-line" />
+                ou découpe toi-même
+                <span className="h-px flex-1 bg-line" />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
                 <select className="input max-w-56" value={sep} onChange={(e) => setSep(e.target.value)}>
                   {SEPS.map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
-                <button className="btn-primary" onClick={applyPaste} disabled={!paste.trim()}>
-                  Créer les cartes
+                <button className="btn-ghost" onClick={applyPaste} disabled={!paste.trim()}>
+                  Découper le texte
                 </button>
               </div>
               {pasteInfo && <p className="text-sm text-ink-2 mt-2">{pasteInfo}</p>}
@@ -315,7 +388,9 @@ export function CreateDeck({
           {editing ? "Enregistrer les modifications" : "Enregistrer le paquet"}
         </button>
         <p className="text-center text-xs text-ink-3 pb-2">
-          Tes fiches sont enregistrées dans ton navigateur, rien n’est envoyé nulle part.
+          Tes fiches sont enregistrées dans ton navigateur. La génération par
+          l’IA envoie seulement le texte collé à notre serveur, le temps de
+          créer les cartes.
         </p>
       </div>
     </div>

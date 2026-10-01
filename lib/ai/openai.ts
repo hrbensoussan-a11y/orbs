@@ -178,3 +178,112 @@ export async function streamChatCompletion(
     },
   });
 }
+
+export type GeneratedCard = { t: string; d: string };
+
+/**
+ * Génère des cartes de révision à partir d'un cours (appel NON streamé : on
+ * attend la réponse complète, puis on la parse en JSON). Lève une `AiError`
+ * en cas d'échec. Réutilisé par la route /api/ai/cards.
+ */
+export async function generateCards(
+  system: string,
+  courseText: string,
+): Promise<GeneratedCard[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_CONFIG.timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AI_CONFIG.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: AI_CONFIG.model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: courseText },
+        ],
+        max_completion_tokens: AI_CONFIG.maxCompletionTokens,
+        reasoning_effort: AI_CONFIG.reasoningEffort,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new AiError(
+        "timeout",
+        "L'IA met trop de temps à répondre. Réessaie dans un instant.",
+        504,
+      );
+    }
+    throw new AiError(
+      "network",
+      "Impossible de contacter l'IA pour le moment.",
+      502,
+    );
+  }
+  clearTimeout(timer);
+
+  if (!res.ok) {
+    console.error(`[ai] cards: OpenAI a répondu ${res.status}`);
+    throw new AiError(
+      "upstream",
+      "L'IA est momentanément indisponible. Réessaie dans un instant.",
+      502,
+    );
+  }
+
+  let json: { choices?: { message?: { content?: string } }[] };
+  try {
+    json = (await res.json()) as typeof json;
+  } catch {
+    throw new AiError("bad_response", "Réponse de l'IA illisible.", 502);
+  }
+
+  const content = json.choices?.[0]?.message?.content ?? "";
+  const cards = parseCards(content);
+  if (!cards.length) {
+    throw new AiError(
+      "bad_response",
+      "L'IA n'a pas réussi à créer de cartes. Colle un texte de cours plus clair et réessaie.",
+      502,
+    );
+  }
+  return cards;
+}
+
+/** Extrait un tableau [{t,d}] même si l'IA l'entoure de texte ou de ```json. */
+function parseCards(raw: string): GeneratedCard[] {
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const start = s.indexOf("[");
+  const end = s.lastIndexOf("]");
+  if (start >= 0 && end > start) s = s.slice(start, end + 1);
+
+  let arr: unknown;
+  try {
+    arr = JSON.parse(s);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(arr)) return [];
+
+  const out: GeneratedCard[] = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const t = String(o.t ?? o.question ?? o.terme ?? o.term ?? "").trim();
+    const d = String(
+      o.d ?? o.reponse ?? o["réponse"] ?? o.definition ?? o["définition"] ?? o.answer ?? "",
+    ).trim();
+    if (t && d) out.push({ t: t.slice(0, 500), d: d.slice(0, 500) });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
