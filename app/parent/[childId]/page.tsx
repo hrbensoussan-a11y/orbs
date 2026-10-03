@@ -5,7 +5,6 @@ import { requireParent } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   CHALLENGE_KINDS,
-  STICKERS,
   daysAgo,
   displayName,
   isLinked,
@@ -18,8 +17,8 @@ import {
 import { xpForLevel } from "@/lib/learn/progress";
 import { MOODS } from "@/lib/definitions";
 import { SUBJECT_TONE } from "@/lib/learn/types";
-import { BadgeShelf, ChallengeCard, Garden, LevelRing, Meter } from "@/components/family/Bits";
-import { ChallengeComposer, CheerComposer } from "@/components/family/Forms";
+import { BadgeShelf, ChallengeCard, LevelRing, Meter } from "@/components/family/Bits";
+import { ChallengeComposer } from "@/components/family/Forms";
 import { cancelChallenge } from "@/app/actions/family";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +61,7 @@ export default async function ChildPage({ params }: PageProps<"/parent/[childId]
   const name = displayName(child);
 
   const weekAgo = daysAgo(7);
-  const [pagesWeek, moods, challenges, cheers] = await Promise.all([
+  const [pagesWeek, moods, challenges] = await Promise.all([
     prisma.entry.count({ where: { userId: child.id, createdAt: { gte: weekAgo }, content: { not: "" } } }),
     child.shareMood
       ? prisma.entry.findMany({
@@ -72,11 +71,6 @@ export default async function ChildPage({ params }: PageProps<"/parent/[childId]
         })
       : Promise.resolve([]),
     loadChallenges(child.id, s, { fromId: parent.id }),
-    prisma.cheer.findMany({
-      where: { fromId: parent.id, toId: child.id },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    }),
   ]);
 
   const weekActions = Object.entries(s.days)
@@ -138,13 +132,6 @@ export default async function ChildPage({ params }: PageProps<"/parent/[childId]
         ))}
       </div>
 
-      {/* Jardin */}
-      <section className="card p-5">
-        <h2 className="font-semibold">Son jardin 🌿</h2>
-        <p className="text-sm text-ink-3 mb-3">Chaque jour de révision fait pousser une plante.</p>
-        <Garden days={s.days} />
-      </section>
-
       {/* Défis */}
       <section className="card p-5">
         <h2 className="font-semibold mb-3">Défis 🎯</h2>
@@ -170,24 +157,6 @@ export default async function ChildPage({ params }: PageProps<"/parent/[childId]
           ))}
         </div>
         <ChallengeComposer childId={child.id} kinds={kinds} />
-      </section>
-
-      {/* Encouragement */}
-      <section className="card p-5">
-        <h2 className="font-semibold">Envoyer un encouragement 💌</h2>
-        <p className="text-sm text-ink-3 mb-3">Il apparaîtra sur son accueil.</p>
-        <CheerComposer childId={child.id} stickers={STICKERS} />
-        {cheers.length > 0 && (
-          <ul className="mt-4 flex flex-col gap-1.5 text-sm">
-            {cheers.map((c) => (
-              <li key={c.id} className="flex items-center gap-2 text-ink-2">
-                <span className="text-lg" aria-hidden>{c.sticker}</span>
-                <span className="truncate flex-1">{c.message || "—"}</span>
-                <span className="text-xs text-ink-3 shrink-0">{c.seenAt ? "👀 vu" : "envoyé"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       {/* Matières */}
