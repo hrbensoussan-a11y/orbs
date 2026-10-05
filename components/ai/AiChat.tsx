@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  Sparkles,
+  Sparkle,
   Send,
   Square,
   Plus,
@@ -470,7 +470,7 @@ export function AiChat({
       {/* En-tête */}
       <header className="flex items-center gap-3 mb-3">
         <span className="icon-chip sky !w-11 !h-11 !rounded-[16px]">
-          <Sparkles size={22} strokeWidth={1.8} aria-hidden />
+          <Sparkle size={22} strokeWidth={1.8} aria-hidden />
         </span>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold leading-tight">Assistant Orbs</h1>
@@ -561,7 +561,7 @@ export function AiChat({
         {showWelcome ? (
           <div className="card p-6 text-center flex flex-col items-center gap-3 mt-2">
             <span className="icon-chip sky !w-14 !h-14 !rounded-[20px]">
-              <Sparkles size={26} strokeWidth={1.8} aria-hidden />
+              <Sparkle size={26} strokeWidth={1.8} aria-hidden />
             </span>
             <h2 className="text-lg font-semibold">{hello}</h2>
             <p className="text-ink-2 text-sm max-w-[38ch] leading-relaxed">

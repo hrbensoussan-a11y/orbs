@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, GraduationCap, Sparkles, NotebookPen, CalendarCheck } from "lucide-react";
+import { Home, GraduationCap, Sparkle, NotebookPen, CalendarCheck } from "lucide-react";
 
 const ITEMS = [
   { href: "/accueil", label: "Menu", Icon: Home, match: ["/accueil"] },
   { href: "/apprendre", label: "Apprendre", Icon: GraduationCap, match: ["/apprendre"] },
-  { href: "/ia", label: "IA", Icon: Sparkles, match: ["/ia"] },
+  { href: "/ia", label: "IA", Icon: Sparkle, match: ["/ia"] },
   { href: "/timeline", label: "Journal", Icon: NotebookPen, match: ["/timeline", "/write", "/entry", "/search"] },
   { href: "/agenda", label: "Agenda", Icon: CalendarCheck, match: ["/agenda"] },
 ];
@@ -18,7 +18,6 @@ export function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Navigation principale">
       <div className="nav-brand" aria-hidden>
-        <span className="orb" />
         <span>Orbs</span>
       </div>
       {ITEMS.map(({ href, label, Icon, match }) => {
