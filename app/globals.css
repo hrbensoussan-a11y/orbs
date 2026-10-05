@@ -571,3 +571,14 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
   color: transparent;
 }
 .ai-ghost-text { color: var(--ink-3); opacity: 0.8; }
+
+/* ===================== Panneau des discussions IA (à gauche) ===================== */
+.ai-panel {
+  flex: none;
+  width: 150px;
+  align-self: flex-start;
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+}
+@media (min-width: 640px) { .ai-panel { width: 220px; } }
+@media (min-width: 900px) { .ai-panel { width: 248px; } }

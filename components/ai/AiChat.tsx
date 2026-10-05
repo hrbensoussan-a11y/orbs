@@ -2,10 +2,10 @@
 
 // Assistant scolaire Orbs — discussions par matière.
 //
-// - Écran d'accueil : la liste des matières (chaque matière = une discussion).
-// - On ouvre une matière → un chat dédié à cette matière (l'IA sait de quelle
-//   matière il s'agit). Chaque matière garde son propre fil (localStorage
-//   "orbs.ai.v2").
+// - Petit panneau de discussions À GAUCHE (une matière = une discussion),
+//   que l'on peut masquer/afficher.
+// - À droite : le chat de la matière sélectionnée (l'IA sait de quelle matière
+//   il s'agit). Chaque matière garde son propre fil (localStorage "orbs.ai.v2").
 // - Parle UNIQUEMENT à notre backend /api/ai/chat (aucune clé côté navigateur).
 // - Commandes # avec suggestion « fantôme », rendu Markdown, copie, erreurs.
 
@@ -13,11 +13,10 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import {
   Send,
   Square,
-  ArrowLeft,
   Trash2,
   Copy,
   Check,
-  ChevronRight,
+  PanelLeft,
   X,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
@@ -60,6 +59,14 @@ const QUICK_ACTIONS: { action: QuickAction; label: string; starter: string }[] =
 function toneColor(subject: string): string {
   return `var(--${SUBJECT_TONE[subject] ?? "green"})`;
 }
+function dotStyle(subject: string, size: number) {
+  return {
+    width: size,
+    height: size,
+    background: `color-mix(in srgb, ${toneColor(subject)} 24%, transparent)`,
+    boxShadow: `inset 0 0 0 1.5px ${toneColor(subject)}`,
+  };
+}
 
 function loadThreads(): Threads {
   try {
@@ -83,6 +90,7 @@ export function AiChat({
 }) {
   const [threads, setThreads] = useState<Threads>({});
   const [subject, setSubject] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [input, setInput] = useState("");
   const [pendingAction, setPendingAction] = useState<QuickAction | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,7 +109,6 @@ export function AiChat({
   const tagPrefsRef = useRef<TagPrefs>(tagPrefs);
   tagPrefsRef.current = tagPrefs;
 
-  // Préférences des # (déclencheur + favoris), relues quand les réglages changent.
   useEffect(() => {
     const refresh = () => setTagPrefs(loadTagPrefs());
     refresh();
@@ -113,7 +120,6 @@ export function AiChat({
     };
   }, []);
 
-  // Chargement initial des fils (client uniquement).
   useEffect(() => {
     const t = loadThreads();
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -148,7 +154,6 @@ export function AiChat({
 
   const messages = subject ? threads[subject] ?? [] : [];
 
-  // Défilement automatique en bas pendant la génération / à l'envoi.
   const lastLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
     const el = endRef.current;
@@ -391,256 +396,261 @@ export function AiChat({
     setTimeout(() => setCopiedIdx((v) => (v === idx ? null : v)), 1500);
   }
 
-  // ---------- Écran : liste des matières (discussions) ----------
-  if (!subject) {
-    return (
-      <div className="mx-auto w-full max-w-2xl px-3 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-32">
-        <header className="mb-4">
-          <h1 className="text-2xl font-semibold leading-tight">Discussions</h1>
-          <p className="text-sm text-ink-3">
-            {firstName ? `${firstName}, choisis` : "Choisis"} une matière pour en parler avec l’assistant.
-          </p>
-        </header>
-
-        {!configured && (
-          <div
-            className="card p-4 mb-3 text-sm text-ink-2"
-            style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }}
-            role="status"
-          >
-            <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible
-            dès que la clé API aura été ajoutée côté serveur.
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2.5">
-          {SUBJECTS.map((s) => {
-            const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
-            return (
-              <button
-                key={s}
-                onClick={() => openSubject(s)}
-                className="card w-full flex items-center gap-3.5 p-4 text-left hover:shadow-[var(--shadow-float)] transition-shadow"
-              >
-                <span
-                  className="w-10 h-10 rounded-full flex-none"
-                  style={{ background: `color-mix(in srgb, ${toneColor(s)} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${toneColor(s)}` }}
-                  aria-hidden
-                />
-                <span className="flex-1 min-w-0">
-                  <span className="font-semibold block">{s}</span>
-                  <span className="text-xs text-ink-3">
-                    {count > 0 ? `${count} message${count > 1 ? "s" : ""}` : "Nouvelle discussion"}
-                  </span>
-                </span>
-                <ChevronRight size={18} aria-hidden className="text-ink-3 flex-none" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // ---------- Écran : chat d'une matière ----------
   const showEmpty = messages.length === 0 && !loading;
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-3 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
-      <header className="flex items-center gap-3 mb-3">
-        <button className="btn-ghost !px-2.5 !py-2" onClick={() => setSubject(null)} aria-label="Retour aux discussions">
-          <ArrowLeft size={18} aria-hidden />
-        </button>
-        <span
-          className="w-9 h-9 rounded-full flex-none"
-          style={{ background: `color-mix(in srgb, ${toneColor(subject)} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${toneColor(subject)}` }}
-          aria-hidden
-        />
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold leading-tight truncate">{subject}</h1>
-          <p className="text-xs text-ink-3">Discussion sur {subject.toLowerCase()}</p>
-        </div>
-        {messages.length > 0 && (
-          <button
-            className="btn-ghost !px-3 !py-2"
-            onClick={() => clearSubject(subject)}
-            aria-label="Effacer cette discussion"
-          >
-            <Trash2 size={18} aria-hidden />
-          </button>
-        )}
-      </header>
-
-      {!configured && (
-        <div
-          className="card p-4 mb-3 text-sm text-ink-2"
-          style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }}
-          role="status"
-        >
-          <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible dès
-          que la clé API aura été ajoutée côté serveur.
-        </div>
-      )}
-
-      <div className="pb-40">
-        {showEmpty ? (
-          <div className="card p-6 text-center flex flex-col items-center gap-3 mt-2">
-            <h2 className="text-base font-semibold">Discussion sur {subject}</h2>
-            <p className="text-ink-2 text-sm max-w-[40ch] leading-relaxed">
-              Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place. Tape{" "}
-              <b>{tagPrefs.trigger}</b> pour une commande.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-1">
-              {QUICK_ACTIONS.map((a) => (
-                <button
-                  key={a.action}
-                  className="chip hover:shadow-[var(--shadow-soft)] transition-shadow"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => onQuickAction(a)}
-                  disabled={!configured}
-                >
-                  {a.label}
-                </button>
-              ))}
+    <div className="mx-auto w-full max-w-4xl px-3 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
+      <div className="flex gap-3 items-start">
+        {/* Panneau des discussions (à gauche, masquable) */}
+        {panelOpen && (
+          <aside className="ai-panel card p-2">
+            <div className="flex items-center justify-between px-1.5 py-1 mb-1">
+              <span className="text-sm font-semibold">Discussions</span>
+              <button
+                className="text-ink-3 hover:text-ink-2 p-1"
+                onClick={() => setPanelOpen(false)}
+                aria-label="Masquer les discussions"
+              >
+                <X size={16} aria-hidden />
+              </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3 mt-2">
-            {messages.map((m, i) =>
-              m.role === "user" ? (
-                <div
-                  key={i}
-                  className="ml-auto max-w-[85%] rounded-[18px] px-3.5 py-2.5 text-[0.95rem] leading-relaxed whitespace-pre-wrap"
-                  style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--ink)" }}
-                >
-                  {m.content}
+            <div className="flex flex-col gap-0.5 overflow-y-auto" style={{ maxHeight: "calc(100dvh - 230px)" }}>
+              {SUBJECTS.map((s) => {
+                const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
+                const activeS = s === subject;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => openSubject(s)}
+                    className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
+                    style={activeS ? { background: `color-mix(in srgb, ${toneColor(s)} 14%, transparent)` } : undefined}
+                  >
+                    <span className="rounded-full flex-none" style={dotStyle(s, 22)} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
+                      {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        )}
+
+        {/* Chat de la matière */}
+        <section className="flex-1 min-w-0">
+          <header className="flex items-center gap-2 mb-3">
+            {!panelOpen && (
+              <button
+                className="btn-ghost !px-2.5 !py-2"
+                onClick={() => setPanelOpen(true)}
+                aria-label="Afficher les discussions"
+              >
+                <PanelLeft size={18} aria-hidden />
+              </button>
+            )}
+            {subject ? (
+              <>
+                <span className="rounded-full flex-none" style={dotStyle(subject, 34)} aria-hidden />
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg font-semibold leading-tight truncate">{subject}</h1>
+                  <p className="text-xs text-ink-3 truncate">Discussion sur {subject.toLowerCase()}</p>
                 </div>
-              ) : (
-                <div key={i} className="mr-auto max-w-[92%] group">
-                  <div className="card px-4 py-1">
-                    {m.content ? (
-                      <Markdown>{m.content}</Markdown>
-                    ) : (
-                      <div className="inline-flex items-center gap-1.5 py-3">
-                        <span className="ai-dot" />
-                        <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
-                        <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
+                {messages.length > 0 && (
+                  <button
+                    className="btn-ghost !px-3 !py-2"
+                    onClick={() => clearSubject(subject)}
+                    aria-label="Effacer cette discussion"
+                  >
+                    <Trash2 size={18} aria-hidden />
+                  </button>
+                )}
+              </>
+            ) : (
+              <h1 className="text-xl font-semibold flex-1">Discussions</h1>
+            )}
+          </header>
+
+          {!configured && (
+            <div
+              className="card p-4 mb-3 text-sm text-ink-2"
+              style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }}
+              role="status"
+            >
+              <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible dès
+              que la clé API aura été ajoutée côté serveur.
+            </div>
+          )}
+
+          {!subject ? (
+            <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed">
+              {firstName ? `${firstName}, choisis` : "Choisis"} une matière {panelOpen ? "dans la liste à gauche" : "en ouvrant la liste"} pour commencer une discussion.
+            </div>
+          ) : (
+            <>
+              <div className="pb-40">
+                {showEmpty ? (
+                  <div className="card p-6 text-center flex flex-col items-center gap-3 mt-1">
+                    <h2 className="text-base font-semibold">Discussion sur {subject}</h2>
+                    <p className="text-ink-2 text-sm max-w-[40ch] leading-relaxed">
+                      Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place. Tape{" "}
+                      <b>{tagPrefs.trigger}</b> pour une commande.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2 mt-1">
+                      {QUICK_ACTIONS.map((a) => (
+                        <button
+                          key={a.action}
+                          className="chip hover:shadow-[var(--shadow-soft)] transition-shadow"
+                          style={{ cursor: "pointer" }}
+                          onClick={() => onQuickAction(a)}
+                          disabled={!configured}
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 mt-1">
+                    {messages.map((m, i) =>
+                      m.role === "user" ? (
+                        <div
+                          key={i}
+                          className="ml-auto max-w-[85%] rounded-[18px] px-3.5 py-2.5 text-[0.95rem] leading-relaxed whitespace-pre-wrap"
+                          style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--ink)" }}
+                        >
+                          {m.content}
+                        </div>
+                      ) : (
+                        <div key={i} className="mr-auto max-w-[92%] group">
+                          <div className="card px-4 py-1">
+                            {m.content ? (
+                              <Markdown>{m.content}</Markdown>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 py-3">
+                                <span className="ai-dot" />
+                                <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
+                                <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
+                              </div>
+                            )}
+                          </div>
+                          {m.content && (
+                            <button
+                              className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
+                              onClick={() => copyMessage(m.content, i)}
+                              aria-label="Copier la réponse"
+                            >
+                              {copiedIdx === i ? (
+                                <>
+                                  <Check size={13} aria-hidden /> Copié
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={13} aria-hidden /> Copier
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      ),
+                    )}
+
+                    {error && (
+                      <div className="mr-auto max-w-[92%]">
+                        <div
+                          className="card px-4 py-3 text-sm text-ink-2"
+                          style={{ background: "color-mix(in srgb, var(--coral) 10%, var(--glass))" }}
+                          role="alert"
+                        >
+                          {error}
+                          {retry && (
+                            <button
+                              className="btn-ghost !py-1.5 !px-3 !text-sm mt-2 block"
+                              onClick={() => send(retry.text, retry.action)}
+                            >
+                              Réessayer
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
+
+                    <div ref={endRef} className="scroll-mb-44" />
                   </div>
-                  {m.content && (
-                    <button
-                      className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
-                      onClick={() => copyMessage(m.content, i)}
-                      aria-label="Copier la réponse"
-                    >
-                      {copiedIdx === i ? (
-                        <>
-                          <Check size={13} aria-hidden /> Copié
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={13} aria-hidden /> Copier
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              ),
-            )}
-
-            {error && (
-              <div className="mr-auto max-w-[92%]">
-                <div
-                  className="card px-4 py-3 text-sm text-ink-2"
-                  style={{ background: "color-mix(in srgb, var(--coral) 10%, var(--glass))" }}
-                  role="alert"
-                >
-                  {error}
-                  {retry && (
-                    <button
-                      className="btn-ghost !py-1.5 !px-3 !text-sm mt-2 block"
-                      onClick={() => send(retry.text, retry.action)}
-                    >
-                      Réessayer
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            )}
 
-            <div ref={endRef} className="scroll-mb-44" />
-          </div>
-        )}
-      </div>
-
-      {/* Composeur */}
-      <div
-        className="sticky z-20 mx-auto w-full max-w-2xl"
-        style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}
-      >
-        {pendingAction && (
-          <div className="mb-1 flex justify-start">
-            <span className="chip" style={{ background: "color-mix(in srgb, var(--sky) 14%, transparent)" }}>
-              {QUICK_ACTIONS.find((a) => a.action === pendingAction)?.label}
-              <button
-                className="ml-1.5 text-ink-3 hover:text-ink-2"
-                onClick={() => setPendingAction(null)}
-                aria-label="Retirer l'action"
+              {/* Composeur */}
+              <div
+                className="sticky z-20 w-full"
+                style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}
               >
-                <X size={12} aria-hidden />
-              </button>
-            </span>
-          </div>
-        )}
-        <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
-          <div className="relative flex-1 self-stretch">
-            {ghost && (
-              <div ref={ghostRef} aria-hidden className="ai-ghost">
-                <span style={{ visibility: "hidden" }}>{input}</span>
-                <span className="ai-ghost-text">{ghost.rest}</span>
+                {pendingAction && (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" style={{ background: "color-mix(in srgb, var(--sky) 14%, transparent)" }}>
+                      {QUICK_ACTIONS.find((a) => a.action === pendingAction)?.label}
+                      <button
+                        className="ml-1.5 text-ink-3 hover:text-ink-2"
+                        onClick={() => setPendingAction(null)}
+                        aria-label="Retirer l'action"
+                      >
+                        <X size={12} aria-hidden />
+                      </button>
+                    </span>
+                  </div>
+                )}
+                <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
+                  <div className="relative flex-1 self-stretch">
+                    {ghost && (
+                      <div ref={ghostRef} aria-hidden className="ai-ghost">
+                        <span style={{ visibility: "hidden" }}>{input}</span>
+                        <span className="ai-ghost-text">{ghost.rest}</span>
+                      </div>
+                    )}
+                    <textarea
+                      ref={inputRef}
+                      className="ai-ta"
+                      rows={1}
+                      placeholder={configured ? "Pose ta question…" : "IA non configurée"}
+                      value={input}
+                      disabled={!configured || loading}
+                      onChange={(e) => {
+                        suppressGhostRef.current = false;
+                        setInput(e.target.value);
+                        refreshGhost(e.target.value, e.target.selectionStart ?? e.target.value.length);
+                      }}
+                      onSelect={(e) => refreshGhost(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+                      onScroll={(e) => {
+                        if (ghostRef.current) ghostRef.current.scrollTop = e.currentTarget.scrollTop;
+                      }}
+                      onBlur={() => setTimeout(() => setGhost(null), 120)}
+                      onKeyDown={onKeyDown}
+                      aria-label="Votre message"
+                    />
+                  </div>
+                  {loading ? (
+                    <button
+                      className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]"
+                      onClick={stop}
+                      aria-label="Arrêter la génération"
+                    >
+                      <Square size={16} aria-hidden fill="currentColor" />
+                    </button>
+                  ) : (
+                    <button
+                      className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]"
+                      onClick={() => send(input, pendingAction)}
+                      disabled={!configured || !input.trim()}
+                      aria-label="Envoyer"
+                    >
+                      <Send size={18} aria-hidden />
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-            <textarea
-              ref={inputRef}
-              className="ai-ta"
-              rows={1}
-              placeholder={configured ? `Pose ta question sur ${subject}…` : "IA non configurée"}
-              value={input}
-              disabled={!configured || loading}
-              onChange={(e) => {
-                suppressGhostRef.current = false;
-                setInput(e.target.value);
-                refreshGhost(e.target.value, e.target.selectionStart ?? e.target.value.length);
-              }}
-              onSelect={(e) => refreshGhost(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
-              onScroll={(e) => {
-                if (ghostRef.current) ghostRef.current.scrollTop = e.currentTarget.scrollTop;
-              }}
-              onBlur={() => setTimeout(() => setGhost(null), 120)}
-              onKeyDown={onKeyDown}
-              aria-label="Votre message"
-            />
-          </div>
-          {loading ? (
-            <button
-              className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]"
-              onClick={stop}
-              aria-label="Arrêter la génération"
-            >
-              <Square size={16} aria-hidden fill="currentColor" />
-            </button>
-          ) : (
-            <button
-              className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]"
-              onClick={() => send(input, pendingAction)}
-              disabled={!configured || !input.trim()}
-              aria-label="Envoyer"
-            >
-              <Send size={18} aria-hidden />
-            </button>
+            </>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
