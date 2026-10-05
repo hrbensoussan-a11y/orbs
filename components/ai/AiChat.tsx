@@ -23,15 +23,16 @@ import {
 import { Markdown } from "@/components/Markdown";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
 import {
-  type AiTag,
   type TagPrefs,
   loadTagPrefs,
   matchTags,
+  normalizeTag,
   extractTags,
 } from "@/lib/ai/tags";
 
-type TagMenu = { open: boolean; query: string; items: AiTag[]; sel: number; start: number };
-const CLOSED_MENU: TagMenu = { open: false, query: "", items: [], sel: 0, start: 0 };
+// Suggestion « fantôme » : la fin de la commande, affichée en gris derrière
+// le texte. Entrée ou Tab la complète (comme un auto-correcteur).
+type Ghost = { id: string; rest: string; start: number } | null;
 
 type Conversation = {
   id: string;
@@ -94,10 +95,12 @@ export function AiChat({
   const [showHistory, setShowHistory] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tagPrefs, setTagPrefs] = useState<TagPrefs>({ trigger: "#", favorites: [] });
-  const [tagMenu, setTagMenu] = useState<TagMenu>(CLOSED_MENU);
+  const [ghost, setGhost] = useState<Ghost>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const suppressGhostRef = useRef(false); // Échap masque la suggestion jusqu'à la frappe suivante
   const abortRef = useRef<AbortController | null>(null);
   const tagPrefsRef = useRef<TagPrefs>(tagPrefs);
   tagPrefsRef.current = tagPrefs;
@@ -115,30 +118,41 @@ export function AiChat({
     };
   }, []);
 
-  // Calcule le menu d'autocomplétion des # selon le texte et la position du curseur.
-  const computeTagMenu = useCallback((value: string, caret: number): TagMenu => {
+  // Calcule la suggestion fantôme : on ne suggère que lorsque le curseur est à
+  // la fin du texte et qu'une commande COMMENCE par ce qui est tapé.
+  const computeGhost = useCallback((value: string, caret: number): Ghost => {
+    if (caret !== value.length) return null; // seulement en fin de saisie
     const trigger = tagPrefsRef.current.trigger;
-    const before = value.slice(0, caret);
-    const idx = before.lastIndexOf(trigger);
-    if (idx === -1) return CLOSED_MENU;
-    const prev = idx > 0 ? before[idx - 1] : "";
-    if (prev && !/\s/.test(prev)) return CLOSED_MENU; // en début de mot seulement
-    const token = before.slice(idx + trigger.length);
-    if (!/^[\p{L}\d-]*$/u.test(token)) return CLOSED_MENU; // le token est terminé
-    const items = matchTags(token, tagPrefsRef.current.favorites);
-    if (!items.length) return CLOSED_MENU;
-    return { open: true, query: token, items, sel: 0, start: idx };
+    const idx = value.lastIndexOf(trigger);
+    if (idx === -1) return null;
+    const prev = idx > 0 ? value[idx - 1] : "";
+    if (prev && !/\s/.test(prev)) return null; // en début de mot seulement
+    const token = value.slice(idx + trigger.length);
+    if (token.length === 0 || !/^[\p{L}\d-]*$/u.test(token)) return null;
+    const best = matchTags(token, tagPrefsRef.current.favorites, 1)[0];
+    if (!best) return null;
+    const nid = normalizeTag(best.id);
+    const nt = normalizeTag(token);
+    if (!nid.startsWith(nt) || nid.length <= nt.length) return null; // doit compléter un préfixe
+    return { id: best.id, rest: best.id.slice(token.length), start: idx };
   }, []);
 
-  function acceptTag(tag: AiTag) {
+  const refreshGhost = useCallback(
+    (value: string, caret: number) => {
+      setGhost(suppressGhostRef.current ? null : computeGhost(value, caret));
+    },
+    [computeGhost],
+  );
+
+  function acceptGhost() {
+    const g = ghost;
+    if (!g) return;
     const el = inputRef.current;
     const trigger = tagPrefsRef.current.trigger;
-    const caret = el?.selectionStart ?? input.length;
-    const start = tagMenu.start;
-    const next = input.slice(0, start) + trigger + tag.id + " " + input.slice(caret);
-    const newCaret = start + trigger.length + tag.id.length + 1;
+    const next = input.slice(0, g.start) + trigger + g.id + " ";
+    const newCaret = next.length;
     setInput(next);
-    setTagMenu(CLOSED_MENU);
+    setGhost(null);
     requestAnimationFrame(() => {
       if (el) {
         el.focus();
@@ -289,7 +303,7 @@ export function AiChat({
 
     setInput("");
     setPendingAction(null);
-    setTagMenu(CLOSED_MENU);
+    setGhost(null);
     setError(null);
     setRetry(null);
     setLoading(true);
@@ -405,26 +419,17 @@ export function AiChat({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    // Navigation dans le menu des # quand il est ouvert.
-    if (tagMenu.open && tagMenu.items.length) {
-      if (e.key === "ArrowDown") {
+    // Suggestion fantôme : Tab, Entrée ou → la complètent (comme un auto-correcteur).
+    if (ghost) {
+      if (e.key === "Tab" || e.key === "ArrowRight" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        setTagMenu((m) => ({ ...m, sel: (m.sel + 1) % m.items.length }));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setTagMenu((m) => ({ ...m, sel: (m.sel - 1 + m.items.length) % m.items.length }));
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        acceptTag(tagMenu.items[tagMenu.sel]);
+        acceptGhost();
         return;
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        setTagMenu(CLOSED_MENU);
+        suppressGhostRef.current = true;
+        setGhost(null);
         return;
       }
     }
@@ -672,49 +677,36 @@ export function AiChat({
             </span>
           </div>
         )}
-        {/* Menu d'autocomplétion des # */}
-        {tagMenu.open && (
-          <div className="card !rounded-[18px] p-1.5 mb-1.5 max-h-72 overflow-y-auto" role="listbox" aria-label="Commandes">
-            {tagMenu.items.map((t, i) => (
-              <button
-                key={t.id}
-                type="button"
-                role="option"
-                aria-selected={i === tagMenu.sel}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => acceptTag(t)}
-                className="w-full text-left rounded-xl px-2.5 py-2 flex items-center gap-2.5"
-                style={i === tagMenu.sel ? { background: "color-mix(in srgb, var(--green) 12%, transparent)" } : undefined}
-              >
-                <span className="text-lg leading-none" aria-hidden>{t.emoji}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">
-                    {tagPrefs.trigger}{t.id}
-                    {tagPrefs.favorites.includes(t.id) && <span className="text-amber ml-1" aria-hidden>★</span>}
-                  </span>
-                  <span className="block text-xs text-ink-3 truncate">{t.desc}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
         <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
-          <textarea
-            ref={inputRef}
-            className="input !border-0 !bg-transparent resize-none max-h-32 flex-1 !py-2"
-            rows={1}
-            placeholder={configured ? `Pose ta question… (tape ${tagPrefs.trigger} pour une commande)` : "IA non configurée"}
-            value={input}
-            disabled={!configured || loading}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setTagMenu(computeTagMenu(e.target.value, e.target.selectionStart ?? e.target.value.length));
-            }}
-            onSelect={(e) => setTagMenu(computeTagMenu(e.currentTarget.value, e.currentTarget.selectionStart ?? 0))}
-            onBlur={() => setTimeout(() => setTagMenu(CLOSED_MENU), 120)}
-            onKeyDown={onKeyDown}
-            aria-label="Votre message"
-          />
+          <div className="relative flex-1 self-stretch">
+            {/* Suggestion fantôme : la fin de la commande, en gris derrière la saisie. */}
+            {ghost && (
+              <div ref={ghostRef} aria-hidden className="ai-ghost">
+                <span style={{ visibility: "hidden" }}>{input}</span>
+                <span className="ai-ghost-text">{ghost.rest}</span>
+              </div>
+            )}
+            <textarea
+              ref={inputRef}
+              className="ai-ta"
+              rows={1}
+              placeholder={configured ? `Pose ta question… (tape ${tagPrefs.trigger} pour une commande)` : "IA non configurée"}
+              value={input}
+              disabled={!configured || loading}
+              onChange={(e) => {
+                suppressGhostRef.current = false;
+                setInput(e.target.value);
+                refreshGhost(e.target.value, e.target.selectionStart ?? e.target.value.length);
+              }}
+              onSelect={(e) => refreshGhost(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+              onScroll={(e) => {
+                if (ghostRef.current) ghostRef.current.scrollTop = e.currentTarget.scrollTop;
+              }}
+              onBlur={() => setTimeout(() => setGhost(null), 120)}
+              onKeyDown={onKeyDown}
+              aria-label="Votre message"
+            />
+          </div>
           {loading ? (
             <button
               className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]"

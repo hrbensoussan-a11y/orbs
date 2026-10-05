@@ -536,3 +536,38 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 .ai-orb:hover { transform: translateY(-1px); box-shadow: var(--shadow-float), 0 10px 26px rgba(0, 0, 0, 0.38); }
 .ai-orb:active { cursor: grabbing; transform: scale(0.95); }
 .ai-orb:focus-visible { outline: 2px solid rgba(121, 224, 172, 0.8); outline-offset: 3px; }
+
+/* ===================== Saisie IA avec suggestion fantôme ===================== */
+/* La zone de saisie et la couche « fantôme » partagent EXACTEMENT les mêmes
+   métriques de texte pour que la suggestion grise s'aligne sur la frappe. */
+.ai-ta,
+.ai-ghost {
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 8px 0.85rem;
+  max-height: 8rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.ai-ta {
+  display: block;
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  resize: none;
+  overflow-y: auto;
+}
+.ai-ta::placeholder { color: var(--ink-3); }
+.ai-ta:focus-visible { outline: none; }
+.ai-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: transparent;
+}
+.ai-ghost-text { color: var(--ink-3); opacity: 0.8; }

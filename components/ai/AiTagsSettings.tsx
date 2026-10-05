@@ -8,7 +8,7 @@
 // Tout est stocké en localStorage et appliqué en direct (évènement "orbs:aitags").
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Star } from "lucide-react";
+import { Search, Star, ChevronDown, ChevronUp } from "lucide-react";
 import {
   AI_TAGS,
   TAG_CATEGORIES,
@@ -23,6 +23,7 @@ export function AiTagsSettings() {
   const [trigger, setTrigger] = useState<Trigger>("#");
   const [favorites, setFavorites] = useState<string[]>([]);
   const [query, setQuery] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     const p = loadTagPrefs();
@@ -83,25 +84,38 @@ export function AiTagsSettings() {
         </div>
       </div>
 
-      {/* Recherche */}
+      {/* Bouton : afficher / masquer toutes les commandes */}
       <div className="border-t border-line pt-4">
-        <div className="relative">
-          <Search size={16} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
-          <input
-            className="input !pl-9"
-            placeholder="Chercher une commande…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Chercher une commande"
-          />
-        </div>
-        <p className="text-xs text-ink-3 mt-2">
-          ★ Mets une commande en favori : elle sera proposée en premier. {favorites.length > 0 && `(${favorites.length} favori${favorites.length > 1 ? "s" : ""})`}
-        </p>
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          aria-expanded={showAll}
+          className="btn-ghost w-full justify-between"
+        >
+          <span>{showAll ? "Masquer les commandes" : `Voir toutes les commandes (${AI_TAGS.length})`}</span>
+          {showAll ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+        </button>
       </div>
 
-      {/* Liste groupée par catégorie */}
-      {TAG_CATEGORIES.map((cat) => {
+      {showAll && (
+        <>
+          {/* Recherche */}
+          <div className="relative">
+            <Search size={16} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+            <input
+              className="input !pl-9"
+              placeholder="Chercher une commande…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Chercher une commande"
+            />
+          </div>
+          <p className="text-xs text-ink-3 -mt-2">
+            ★ Mets une commande en favori : elle sera proposée en premier. {favorites.length > 0 && `(${favorites.length} favori${favorites.length > 1 ? "s" : ""})`}
+          </p>
+
+          {/* Liste groupée par catégorie */}
+          {TAG_CATEGORIES.map((cat) => {
         const items = filtered.filter((t) => t.category === cat);
         if (!items.length) return null;
         return (
@@ -135,7 +149,9 @@ export function AiTagsSettings() {
             </div>
           </div>
         );
-      })}
+          })}
+        </>
+      )}
     </div>
   );
 }
