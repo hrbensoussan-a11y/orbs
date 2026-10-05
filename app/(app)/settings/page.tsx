@@ -6,6 +6,7 @@ import { updateSettings } from "@/app/actions/settings";
 import { logout } from "@/app/actions/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
 import { AiOrbSettings } from "@/components/ai/AiOrbSettings";
+import { AiTagsSettings } from "@/components/ai/AiTagsSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,17 @@ export default async function SettingsPage() {
           l’agrandir ou l’enlever.
         </p>
         <AiOrbSettings />
+      </section>
+
+      {/* Commandes # de l'IA */}
+      <section className="card p-5">
+        <h2 className="font-semibold mb-1">Commandes de l’IA (#)</h2>
+        <p className="text-sm text-ink-2 mb-4">
+          Dans le chat, tape <span className="text-ink">#</span> pour donner un
+          contexte ou un mode à l’assistant (par ex. <span className="text-ink">#réviser</span>,
+          <span className="text-ink"> #agenda</span>).
+        </p>
+        <AiTagsSettings />
       </section>
 
       {/* Données */}

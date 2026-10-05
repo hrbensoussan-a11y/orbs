@@ -22,6 +22,16 @@ import {
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
+import {
+  type AiTag,
+  type TagPrefs,
+  loadTagPrefs,
+  matchTags,
+  extractTags,
+} from "@/lib/ai/tags";
+
+type TagMenu = { open: boolean; query: string; items: AiTag[]; sel: number; start: number };
+const CLOSED_MENU: TagMenu = { open: false, query: "", items: [], sel: 0, start: 0 };
 
 type Conversation = {
   id: string;
@@ -83,10 +93,63 @@ export function AiChat({
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [tagPrefs, setTagPrefs] = useState<TagPrefs>({ trigger: "#", favorites: [] });
+  const [tagMenu, setTagMenu] = useState<TagMenu>(CLOSED_MENU);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const tagPrefsRef = useRef<TagPrefs>(tagPrefs);
+  tagPrefsRef.current = tagPrefs;
+
+  // Préférences des # (déclencheur + favoris) : lues après le montage et
+  // re-synchronisées quand les réglages changent (même onglet ou autre onglet).
+  useEffect(() => {
+    const refresh = () => setTagPrefs(loadTagPrefs());
+    refresh();
+    window.addEventListener("orbs:aitags", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("orbs:aitags", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  // Calcule le menu d'autocomplétion des # selon le texte et la position du curseur.
+  const computeTagMenu = useCallback((value: string, caret: number): TagMenu => {
+    const trigger = tagPrefsRef.current.trigger;
+    const before = value.slice(0, caret);
+    const idx = before.lastIndexOf(trigger);
+    if (idx === -1) return CLOSED_MENU;
+    const prev = idx > 0 ? before[idx - 1] : "";
+    if (prev && !/\s/.test(prev)) return CLOSED_MENU; // en début de mot seulement
+    const token = before.slice(idx + trigger.length);
+    if (!/^[\p{L}\d-]*$/u.test(token)) return CLOSED_MENU; // le token est terminé
+    const items = matchTags(token, tagPrefsRef.current.favorites);
+    if (!items.length) return CLOSED_MENU;
+    return { open: true, query: token, items, sel: 0, start: idx };
+  }, []);
+
+  function acceptTag(tag: AiTag) {
+    const el = inputRef.current;
+    const trigger = tagPrefsRef.current.trigger;
+    const caret = el?.selectionStart ?? input.length;
+    const start = tagMenu.start;
+    const next = input.slice(0, start) + trigger + tag.id + " " + input.slice(caret);
+    const newCaret = start + trigger.length + tag.id.length + 1;
+    setInput(next);
+    setTagMenu(CLOSED_MENU);
+    requestAnimationFrame(() => {
+      if (el) {
+        el.focus();
+        try {
+          el.setSelectionRange(newCaret, newCaret);
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }
 
   // Chargement initial depuis localStorage (client uniquement). Ce state ne
   // peut PAS être calculé au rendu : localStorage n'existe pas côté serveur,
@@ -226,6 +289,7 @@ export function AiChat({
 
     setInput("");
     setPendingAction(null);
+    setTagMenu(CLOSED_MENU);
     setError(null);
     setRetry(null);
     setLoading(true);
@@ -264,7 +328,12 @@ export function AiChat({
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: clean, history, action: action ?? undefined }),
+        body: JSON.stringify({
+          message: clean,
+          history,
+          action: action ?? undefined,
+          tags: extractTags(clean, tagPrefsRef.current.trigger),
+        }),
         signal: ac.signal,
       });
 
@@ -336,6 +405,29 @@ export function AiChat({
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Navigation dans le menu des # quand il est ouvert.
+    if (tagMenu.open && tagMenu.items.length) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setTagMenu((m) => ({ ...m, sel: (m.sel + 1) % m.items.length }));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setTagMenu((m) => ({ ...m, sel: (m.sel - 1 + m.items.length) % m.items.length }));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        acceptTag(tagMenu.items[tagMenu.sel]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setTagMenu(CLOSED_MENU);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send(input, pendingAction);
@@ -580,15 +672,46 @@ export function AiChat({
             </span>
           </div>
         )}
+        {/* Menu d'autocomplétion des # */}
+        {tagMenu.open && (
+          <div className="card !rounded-[18px] p-1.5 mb-1.5 max-h-72 overflow-y-auto" role="listbox" aria-label="Commandes">
+            {tagMenu.items.map((t, i) => (
+              <button
+                key={t.id}
+                type="button"
+                role="option"
+                aria-selected={i === tagMenu.sel}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => acceptTag(t)}
+                className="w-full text-left rounded-xl px-2.5 py-2 flex items-center gap-2.5"
+                style={i === tagMenu.sel ? { background: "color-mix(in srgb, var(--green) 12%, transparent)" } : undefined}
+              >
+                <span className="text-lg leading-none" aria-hidden>{t.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">
+                    {tagPrefs.trigger}{t.id}
+                    {tagPrefs.favorites.includes(t.id) && <span className="text-amber ml-1" aria-hidden>★</span>}
+                  </span>
+                  <span className="block text-xs text-ink-3 truncate">{t.desc}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
           <textarea
             ref={inputRef}
             className="input !border-0 !bg-transparent resize-none max-h-32 flex-1 !py-2"
             rows={1}
-            placeholder={configured ? "Pose ta question…" : "IA non configurée"}
+            placeholder={configured ? `Pose ta question… (tape ${tagPrefs.trigger} pour une commande)` : "IA non configurée"}
             value={input}
             disabled={!configured || loading}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setTagMenu(computeTagMenu(e.target.value, e.target.selectionStart ?? e.target.value.length));
+            }}
+            onSelect={(e) => setTagMenu(computeTagMenu(e.currentTarget.value, e.currentTarget.selectionStart ?? 0))}
+            onBlur={() => setTimeout(() => setTagMenu(CLOSED_MENU), 120)}
             onKeyDown={onKeyDown}
             aria-label="Votre message"
           />

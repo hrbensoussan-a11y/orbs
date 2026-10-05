@@ -7,6 +7,7 @@
 
 import { AI_CONFIG } from "./config";
 import type { OrbsContext, QuickAction } from "./types";
+import { TAG_BY_ID } from "./tags";
 
 type Profile = {
   firstName?: string | null;
@@ -28,10 +29,11 @@ const ACTION_HINTS: Record<QuickAction, string> = {
     "Explique l'erreur avec bienveillance : pourquoi c'est faux, la bonne démarche, et un moyen de ne plus la refaire.",
 };
 
-/** Construit le message système (personnalité + niveau + action). */
+/** Construit le message système (personnalité + niveau + action + modes #). */
 export function buildSystemPrompt(
   profile: Profile,
   action?: QuickAction,
+  tags?: string[],
 ): string {
   const name = (profile.firstName || "").trim();
   const klass = (profile.schoolClass || "").trim();
@@ -62,6 +64,25 @@ export function buildSystemPrompt(
 
   if (action && ACTION_HINTS[action]) {
     lines.push("", `Consigne pour cette demande : ${ACTION_HINTS[action]}`);
+  }
+
+  // Modes « # » activés par l'élève. Chaque tag oriente ta réponse.
+  const modeLines: string[] = [];
+  const seen = new Set<string>();
+  for (const id of tags ?? []) {
+    const tag = TAG_BY_ID.get(id);
+    if (tag && !seen.has(id)) {
+      seen.add(id);
+      modeLines.push(`- #${tag.id} : ${tag.desc}`);
+    }
+  }
+  if (modeLines.length) {
+    lines.push(
+      "",
+      "Modes activés par l'élève (via des #) — adapte ta réponse en conséquence :",
+      ...modeLines,
+      "Si un mode nécessite des données que tu n'as pas reçues (agenda, cartes, journal…), demande-les simplement à l'élève plutôt que d'inventer. Ne révèle jamais de donnée privée sans que l'élève l'ait fournie.",
+    );
   }
 
   return lines.join("\n");
