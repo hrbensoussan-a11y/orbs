@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { updateSettings } from "@/app/actions/settings";
 import { logout } from "@/app/actions/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
+import { AiOrbSettings } from "@/components/ai/AiOrbSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,16 @@ export default async function SettingsPage() {
             Enregistrer
           </button>
         </form>
+      </section>
+
+      {/* Bulle IA */}
+      <section className="card p-5">
+        <h2 className="font-semibold mb-1">Bulle IA</h2>
+        <p className="text-sm text-ink-2 mb-4">
+          Le petit rond qui ouvre l’assistant. Tu peux le déplacer sur l’écran,
+          l’agrandir ou l’enlever.
+        </p>
+        <AiOrbSettings />
       </section>
 
       {/* Données */}

@@ -498,6 +498,7 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 }
 
 /* ===================== Bulle IA flottante (déplaçable) ===================== */
+/* Logo Orbs : cercle foncé cerclé de vert, avec un point vert à l'intérieur. */
 .ai-orb {
   position: fixed;
   width: 56px;
@@ -505,12 +506,9 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
   border-radius: 50%;
   border: none;
   z-index: 35; /* au-dessus de la barre (30), sous les overlays plein écran */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: linear-gradient(135deg, var(--green), var(--sky));
-  box-shadow: var(--shadow-float), 0 8px 22px color-mix(in srgb, var(--green) 32%, transparent);
+  display: block;
+  background: #17271f;
+  box-shadow: var(--shadow-float), 0 8px 22px rgba(0, 0, 0, 0.3);
   cursor: grab;
   touch-action: none; /* le glissement ne fait pas défiler la page */
   -webkit-tap-highlight-color: transparent;
@@ -518,6 +516,23 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
   -webkit-user-select: none;
   transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
 }
-.ai-orb:hover { transform: translateY(-1px); box-shadow: var(--shadow-float), 0 10px 26px color-mix(in srgb, var(--green) 40%, transparent); }
+.ai-orb::before { /* fin cerclage vert intérieur */
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(121, 224, 172, 0.5);
+}
+.ai-orb .ai-orb-dot { /* point vert (la « forme minimale ») */
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  left: 54%;
+  top: 30%;
+  border-radius: 50%;
+  background: #79e0ac;
+  box-shadow: 0 0 10px rgba(121, 224, 172, 0.55);
+}
+.ai-orb:hover { transform: translateY(-1px); box-shadow: var(--shadow-float), 0 10px 26px rgba(0, 0, 0, 0.38); }
 .ai-orb:active { cursor: grabbing; transform: scale(0.95); }
-.ai-orb:focus-visible { outline: 2px solid color-mix(in srgb, var(--sky) 70%, transparent); outline-offset: 3px; }
+.ai-orb:focus-visible { outline: 2px solid rgba(121, 224, 172, 0.8); outline-offset: 3px; }
