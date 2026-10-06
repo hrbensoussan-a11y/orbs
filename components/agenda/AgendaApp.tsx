@@ -11,7 +11,8 @@ import {
   User,
   Clock,
 } from "lucide-react";
-import { SUBJECTS, SUBJECT_TONE } from "@/lib/learn/types";
+import { SUBJECTS } from "@/lib/learn/types";
+import { subjectColor } from "@/lib/subjectColors";
 import {
   loadAgenda,
   saveAgenda,
@@ -27,8 +28,9 @@ import {
 } from "@/lib/agenda/store";
 
 const SUBJ = [...SUBJECTS, "Autre"];
+// La couleur d'une matière (celle choisie par l'élève, sinon celle par défaut).
 function tone(subject: string): string {
-  return `var(--${SUBJECT_TONE[subject] || "green"})`;
+  return subjectColor(subject);
 }
 
 type Tab = "devoirs" | "edt";

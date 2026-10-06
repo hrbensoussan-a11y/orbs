@@ -17,10 +17,16 @@ import {
   Check,
   X,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
-import { SUBJECT_TONE } from "@/lib/learn/types";
+import {
+  SUBJECT_PALETTE,
+  subjectColor,
+  loadSubjectColors,
+  saveSubjectColors,
+} from "@/lib/subjectColors";
 import {
   type TagPrefs,
   loadTagPrefs,
@@ -56,9 +62,6 @@ const QUICK_ACTIONS: { action: QuickAction; label: string; starter: string }[] =
   { action: "revise", label: "M'aider à réviser", starter: "Aide-moi à réviser " },
 ];
 
-function toneColor(subject: string): string {
-  return `var(--${SUBJECT_TONE[subject] ?? "green"})`;
-}
 function newId(): string {
   try {
     return crypto.randomUUID();
@@ -102,6 +105,11 @@ export function AiChat({
   const [loaded, setLoaded] = useState(false);
   const [tagPrefs, setTagPrefs] = useState<TagPrefs>({ trigger: "#", favorites: [] });
   const [ghost, setGhost] = useState<Ghost>(null);
+  const [subjColors, setSubjColors] = useState<Record<string, string>>({});
+  const [colorFor, setColorFor] = useState<string | null>(null); // matière dont le sélecteur est ouvert
+  const [editingConv, setEditingConv] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const colorOf = (s: string) => subjectColor(s, subjColors);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -118,6 +126,18 @@ export function AiChat({
     window.addEventListener("storage", refresh);
     return () => {
       window.removeEventListener("orbs:aitags", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  // Couleurs des matières (personnalisées), relues quand elles changent.
+  useEffect(() => {
+    const refresh = () => setSubjColors(loadSubjectColors());
+    refresh();
+    window.addEventListener("orbs:subjectcolors", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("orbs:subjectcolors", refresh);
       window.removeEventListener("storage", refresh);
     };
   }, []);
@@ -247,6 +267,25 @@ export function AiChat({
   function deleteConversation(id: string) {
     setConvs((prev) => prev.filter((c) => c.id !== id));
     if (sel?.kind === "conv" && sel.id === id) setSel(null);
+  }
+
+  function startRename(c: Conv) {
+    setEditingConv(c.id);
+    setEditName(c.title);
+  }
+  function commitRename() {
+    const id = editingConv;
+    if (id) {
+      const name = editName.trim();
+      setConvs((prev) => prev.map((c) => (c.id === id ? { ...c, title: name } : c)));
+    }
+    setEditingConv(null);
+  }
+  function pickSubjectColor(subject: string, hex: string) {
+    const next = { ...subjColors, [subject]: hex };
+    setSubjColors(next);
+    saveSubjectColors(next);
+    setColorFor(null);
   }
 
   function clearCurrent() {
@@ -422,7 +461,7 @@ export function AiChat({
   }
 
   const title = !sel ? "" : sel.kind === "subject" ? sel.id : convs.find((c) => c.id === sel.id)?.title || "Nouvelle discussion";
-  const headTone = sel?.kind === "subject" ? toneColor(sel.id) : "var(--sky)";
+  const headTone = sel?.kind === "subject" ? colorOf(sel.id) : "var(--sky)";
   const showEmpty = messages.length === 0 && !loading;
 
   return (
@@ -447,16 +486,42 @@ export function AiChat({
                     const activeC = sel?.kind === "conv" && sel.id === c.id;
                     return (
                       <div key={c.id} className="flex items-center gap-1">
-                        <button
-                          onClick={() => select({ kind: "conv", id: c.id })}
-                          className="flex-1 min-w-0 text-left rounded-xl px-2 py-2 text-sm truncate"
-                          style={activeC ? { background: "color-mix(in srgb, var(--sky) 14%, transparent)", fontWeight: 600 } : undefined}
-                        >
-                          {c.title || "Nouvelle discussion"}
-                        </button>
-                        <button className="text-ink-3 hover:text-coral p-1.5 flex-none" onClick={() => deleteConversation(c.id)} aria-label="Supprimer la discussion">
-                          <Trash2 size={14} aria-hidden />
-                        </button>
+                        {editingConv === c.id ? (
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitRename();
+                              } else if (e.key === "Escape") {
+                                setEditingConv(null);
+                              }
+                            }}
+                            className="input flex-1 min-w-0 !py-1.5 !px-2 !text-sm"
+                            placeholder="Nom de la discussion"
+                            aria-label="Nom de la discussion"
+                          />
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => select({ kind: "conv", id: c.id })}
+                              onDoubleClick={() => startRename(c)}
+                              className="flex-1 min-w-0 text-left rounded-xl px-2 py-2 text-sm truncate"
+                              style={activeC ? { background: "color-mix(in srgb, var(--sky) 14%, transparent)", fontWeight: 600 } : undefined}
+                            >
+                              {c.title || "Nouvelle discussion"}
+                            </button>
+                            <button className="text-ink-3 hover:text-ink-2 p-1.5 flex-none" onClick={() => startRename(c)} aria-label="Renommer la discussion">
+                              <Pencil size={14} aria-hidden />
+                            </button>
+                            <button className="text-ink-3 hover:text-coral p-1.5 flex-none" onClick={() => deleteConversation(c.id)} aria-label="Supprimer la discussion">
+                              <Trash2 size={14} aria-hidden />
+                            </button>
+                          </>
+                        )}
                       </div>
                     );
                   })
@@ -469,23 +534,44 @@ export function AiChat({
                 {SUBJECTS.map((s) => {
                   const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
                   const activeS = sel?.kind === "subject" && sel.id === s;
+                  const col = colorOf(s);
                   return (
-                    <button
-                      key={s}
-                      onClick={() => select({ kind: "subject", id: s })}
-                      className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
-                      style={activeS ? { background: `color-mix(in srgb, ${toneColor(s)} 14%, transparent)` } : undefined}
-                    >
-                      <span
-                        className="rounded-full flex-none"
-                        style={{ width: 20, height: 20, background: `color-mix(in srgb, ${toneColor(s)} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${toneColor(s)}` }}
-                        aria-hidden
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
-                        {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
-                      </span>
-                    </button>
+                    <div key={s}>
+                      <div
+                        className="w-full flex items-center gap-2.5 rounded-xl px-2 py-1.5"
+                        style={activeS ? { background: `color-mix(in srgb, ${col} 14%, transparent)` } : undefined}
+                      >
+                        <button
+                          onClick={() => setColorFor((v) => (v === s ? null : s))}
+                          aria-label={`Changer la couleur de ${s}`}
+                          className="rounded-full flex-none"
+                          style={{ width: 22, height: 22, background: `color-mix(in srgb, ${col} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${col}` }}
+                        />
+                        <button onClick={() => select({ kind: "subject", id: s })} className="min-w-0 flex-1 text-left py-1">
+                          <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
+                          {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
+                        </button>
+                      </div>
+                      {colorFor === s && (
+                        <div className="flex flex-wrap gap-1.5 px-2.5 py-2">
+                          {SUBJECT_PALETTE.map((c) => (
+                            <button
+                              key={c.hex}
+                              onClick={() => pickSubjectColor(s, c.hex)}
+                              aria-label={c.name}
+                              title={c.name}
+                              className="w-6 h-6 rounded-full"
+                              style={{
+                                background: c.hex,
+                                boxShadow: col.toLowerCase() === c.hex.toLowerCase()
+                                  ? `0 0 0 2px var(--canvas), 0 0 0 4px ${c.hex}`
+                                  : "inset 0 0 0 1px rgba(0,0,0,.15)",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
