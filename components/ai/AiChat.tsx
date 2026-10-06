@@ -15,7 +15,6 @@ import {
   Trash2,
   Copy,
   Check,
-  PanelLeft,
   X,
   Plus,
 } from "lucide-react";
@@ -94,7 +93,6 @@ export function AiChat({
   const [threads, setThreads] = useState<Threads>({});
   const [convs, setConvs] = useState<Conv[]>([]);
   const [sel, setSel] = useState<Sel>(null);
-  const [panelOpen, setPanelOpen] = useState(true);
   const [input, setInput] = useState("");
   const [pendingAction, setPendingAction] = useState<QuickAction | null>(null);
   const [loading, setLoading] = useState(false);
@@ -428,21 +426,15 @@ export function AiChat({
   const showEmpty = messages.length === 0 && !loading;
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-3 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
+    <div className="w-full px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
       <div className="flex gap-3 items-stretch" style={{ minHeight: "calc(100dvh - 150px)" }}>
-        {/* Panneau des discussions (à gauche, masquable) */}
-        {panelOpen && (
-          <aside className="ai-panel card p-2">
+        {/* Panneau des discussions (à gauche) */}
+        <aside className="ai-panel card p-2">
             <div className="flex items-center justify-between px-1.5 py-1 mb-1">
               <span className="text-sm font-semibold">Discussions</span>
-              <div className="flex items-center gap-1">
-                <button className="text-ink-2 hover:text-ink p-1" onClick={newConversation} aria-label="Nouvelle discussion">
-                  <Plus size={16} aria-hidden />
-                </button>
-                <button className="text-ink-3 hover:text-ink-2 p-1" onClick={() => setPanelOpen(false)} aria-label="Masquer le panneau">
-                  <X size={16} aria-hidden />
-                </button>
-              </div>
+              <button className="text-ink-2 hover:text-ink p-1" onClick={newConversation} aria-label="Nouvelle discussion">
+                <Plus size={16} aria-hidden />
+              </button>
             </div>
 
             <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 210px)" }}>
@@ -498,17 +490,11 @@ export function AiChat({
                 })}
               </div>
             </div>
-          </aside>
-        )}
+        </aside>
 
         {/* Chat */}
         <section className="flex-1 min-w-0 flex flex-col">
           <header className="flex items-center gap-2 mb-3">
-            {!panelOpen && (
-              <button className="btn-ghost !px-2.5 !py-2" onClick={() => setPanelOpen(true)} aria-label="Afficher les discussions">
-                <PanelLeft size={18} aria-hidden />
-              </button>
-            )}
             {sel ? (
               <>
                 <span className="rounded-full flex-none" style={{ width: 34, height: 34, background: `color-mix(in srgb, ${headTone} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${headTone}` }} aria-hidden />
@@ -538,7 +524,7 @@ export function AiChat({
           {!sel ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed max-w-sm">
-                {firstName ? `${firstName}, choisis` : "Choisis"} une discussion {panelOpen ? "à gauche" : "en ouvrant le panneau"} — une conversation libre, ou une matière — pour commencer.
+                {firstName ? `${firstName}, choisis` : "Choisis"} une discussion à gauche — une conversation libre, ou une matière — pour commencer.
               </div>
             </div>
           ) : (
