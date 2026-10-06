@@ -548,7 +548,7 @@ export function AiChat({
                   <div className="card p-6 text-center flex flex-col items-center gap-3 mt-1">
                     <h2 className="text-base font-semibold">{sel.kind === "subject" ? `Discussion sur ${sel.id}` : "Nouvelle discussion"}</h2>
                     <p className="text-ink-2 text-sm max-w-[40ch] leading-relaxed">
-                      Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place. Tape <b>{tagPrefs.trigger}</b> pour une commande.
+                      Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place.
                     </p>
                     <div className="flex flex-wrap justify-center gap-2 mt-1">
                       {QUICK_ACTIONS.map((a) => (
