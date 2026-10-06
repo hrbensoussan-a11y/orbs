@@ -1,13 +1,12 @@
 "use client";
 
-// Assistant scolaire Orbs — discussions par matière.
+// Assistant scolaire Orbs.
 //
-// - Petit panneau de discussions À GAUCHE (une matière = une discussion),
-//   que l'on peut masquer/afficher.
-// - À droite : le chat de la matière sélectionnée (l'IA sait de quelle matière
-//   il s'agit). Chaque matière garde son propre fil (localStorage "orbs.ai.v2").
-// - Parle UNIQUEMENT à notre backend /api/ai/chat (aucune clé côté navigateur).
-// - Commandes # avec suggestion « fantôme », rendu Markdown, copie, erreurs.
+// Panneau de gauche (masquable) à DEUX sections :
+//   - « Discussions » : des conversations libres (comme un chat normal).
+//   - « Matières » : une discussion par matière (l'IA sait la matière).
+// À droite : le chat de la discussion sélectionnée.
+// Tout est en localStorage ("orbs.ai.v2"). Parle au backend /api/ai/chat.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -18,6 +17,7 @@ import {
   Check,
   PanelLeft,
   X,
+  Plus,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
@@ -32,11 +32,12 @@ import {
 
 type Ghost = { id: string; rest: string; start: number } | null;
 type Threads = Record<string, ChatMessage[]>;
+type Conv = { id: string; title: string; messages: ChatMessage[] };
+type Sel = { kind: "subject" | "conv"; id: string } | null;
 
 const STORE_KEY = "orbs.ai.v2";
 const MAX_HISTORY = 10;
 
-// Les matières de discussion (une discussion = une matière).
 const SUBJECTS = [
   "Maths",
   "Français",
@@ -59,26 +60,28 @@ const QUICK_ACTIONS: { action: QuickAction; label: string; starter: string }[] =
 function toneColor(subject: string): string {
   return `var(--${SUBJECT_TONE[subject] ?? "green"})`;
 }
-function dotStyle(subject: string, size: number) {
-  return {
-    width: size,
-    height: size,
-    background: `color-mix(in srgb, ${toneColor(subject)} 24%, transparent)`,
-    boxShadow: `inset 0 0 0 1.5px ${toneColor(subject)}`,
-  };
+function newId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `c${Date.now()}${Math.random().toString(16).slice(2)}`;
+  }
 }
 
-function loadThreads(): Threads {
+function loadStore(): { threads: Threads; convs: Conv[] } {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
-      if (data?.threads && typeof data.threads === "object") return data.threads;
+      return {
+        threads: data?.threads && typeof data.threads === "object" ? data.threads : {},
+        convs: Array.isArray(data?.convs) ? data.convs : [],
+      };
     }
   } catch {
-    /* localStorage indisponible ou données corrompues */
+    /* indisponible / corrompu */
   }
-  return {};
+  return { threads: {}, convs: [] };
 }
 
 export function AiChat({
@@ -89,7 +92,8 @@ export function AiChat({
   configured: boolean;
 }) {
   const [threads, setThreads] = useState<Threads>({});
-  const [subject, setSubject] = useState<string | null>(null);
+  const [convs, setConvs] = useState<Conv[]>([]);
+  const [sel, setSel] = useState<Sel>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [input, setInput] = useState("");
   const [pendingAction, setPendingAction] = useState<QuickAction | null>(null);
@@ -121,16 +125,17 @@ export function AiChat({
   }, []);
 
   useEffect(() => {
-    const t = loadThreads();
+    const { threads: t, convs: c } = loadStore();
     /* eslint-disable react-hooks/set-state-in-effect */
     setThreads(t);
+    setConvs(c);
     setLoaded(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const persist = useCallback((t: Threads) => {
+  const persist = useCallback((t: Threads, c: Conv[]) => {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ version: 2, threads: t }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ version: 3, threads: t, convs: c }));
     } catch {
       /* quota plein / mode privé */
     }
@@ -138,21 +143,26 @@ export function AiChat({
 
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => persist(threads), loading ? 500 : 0);
+    const id = setTimeout(() => persist(threads, convs), loading ? 500 : 0);
     return () => clearTimeout(id);
-  }, [threads, loaded, loading, persist]);
+  }, [threads, convs, loaded, loading, persist]);
 
   useEffect(() => {
-    const flush = () => persist(threads);
+    const flush = () => persist(threads, convs);
     window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", flush);
     return () => {
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", flush);
     };
-  }, [threads, persist]);
+  }, [threads, convs, persist]);
 
-  const messages = subject ? threads[subject] ?? [] : [];
+  // Messages de la sélection courante.
+  const messages: ChatMessage[] = !sel
+    ? []
+    : sel.kind === "subject"
+      ? threads[sel.id] ?? []
+      : convs.find((c) => c.id === sel.id)?.messages ?? [];
 
   const lastLen = messages[messages.length - 1]?.content.length ?? 0;
   useEffect(() => {
@@ -163,9 +173,13 @@ export function AiChat({
     if (justSent || nearBottom) el.scrollIntoView({ block: "end" });
   }, [messages.length, lastLen, loading]);
 
-  const updateThread = useCallback(
-    (subj: string, mutate: (msgs: ChatMessage[]) => ChatMessage[]) => {
-      setThreads((prev) => ({ ...prev, [subj]: mutate(prev[subj] ?? []) }));
+  const applyTo = useCallback(
+    (tgt: NonNullable<Sel>, mutate: (msgs: ChatMessage[]) => ChatMessage[]) => {
+      if (tgt.kind === "subject") {
+        setThreads((prev) => ({ ...prev, [tgt.id]: mutate(prev[tgt.id] ?? []) }));
+      } else {
+        setConvs((prev) => prev.map((c) => (c.id === tgt.id ? { ...c, messages: mutate(c.messages) } : c)));
+      }
     },
     [],
   );
@@ -216,8 +230,8 @@ export function AiChat({
     });
   }
 
-  function openSubject(s: string) {
-    setSubject(s);
+  function select(s: Sel) {
+    setSel(s);
     setError(null);
     setRetry(null);
     setInput("");
@@ -226,24 +240,40 @@ export function AiChat({
     setTimeout(() => inputRef.current?.focus(), 40);
   }
 
-  function clearSubject(s: string) {
-    setThreads((prev) => ({ ...prev, [s]: [] }));
+  function newConversation() {
+    const conv: Conv = { id: newId(), title: "", messages: [] };
+    setConvs((prev) => [conv, ...prev]);
+    select({ kind: "conv", id: conv.id });
+  }
+
+  function deleteConversation(id: string) {
+    setConvs((prev) => prev.filter((c) => c.id !== id));
+    if (sel?.kind === "conv" && sel.id === id) setSel(null);
+  }
+
+  function clearCurrent() {
+    if (!sel) return;
+    applyTo(sel, () => []);
     setError(null);
     setRetry(null);
   }
 
   async function send(text: string, action: QuickAction | null) {
     const clean = text.trim();
-    if (!clean || loading || !configured || !subject) return;
-    const subj = subject;
+    if (!clean || loading || !configured || !sel) return;
+    const tgt = sel;
+    const subjectForCtx = tgt.kind === "subject" ? tgt.id : undefined;
 
-    const baseMessages = threads[subj] ?? [];
-    updateThread(subj, (msgs) => [
+    const base = messages;
+    applyTo(tgt, (msgs) => [
       ...msgs,
       { role: "user", content: clean },
       { role: "assistant", content: "" },
     ]);
-    const assistantIndex = baseMessages.length + 1;
+    if (tgt.kind === "conv") {
+      setConvs((prev) => prev.map((c) => (c.id === tgt.id && !c.title ? { ...c, title: clean.slice(0, 40) } : c)));
+    }
+    const assistantIndex = base.length + 1;
 
     setInput("");
     setPendingAction(null);
@@ -252,14 +282,14 @@ export function AiChat({
     setRetry(null);
     setLoading(true);
 
-    const history = baseMessages.slice(-MAX_HISTORY);
+    const history = base.slice(-MAX_HISTORY);
     const ac = new AbortController();
     abortRef.current = ac;
 
     let acc = "";
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     const writeInto = (content: string) =>
-      updateThread(subj, (msgs) => {
+      applyTo(tgt, (msgs) => {
         const next = msgs.slice();
         if (next[assistantIndex]?.role === "assistant")
           next[assistantIndex] = { role: "assistant", content };
@@ -273,7 +303,7 @@ export function AiChat({
       }, 60);
     };
     const removeEmptyPlaceholder = () =>
-      updateThread(subj, (msgs) => {
+      applyTo(tgt, (msgs) => {
         const next = msgs.slice();
         if (next[assistantIndex]?.role === "assistant" && !next[assistantIndex].content)
           next.splice(assistantIndex, 1);
@@ -288,7 +318,7 @@ export function AiChat({
           message: clean,
           history,
           action: action ?? undefined,
-          context: { subject: subj },
+          context: subjectForCtx ? { subject: subjectForCtx } : undefined,
           tags: extractTags(clean, tagPrefsRef.current.trigger),
         }),
         signal: ac.signal,
@@ -348,13 +378,11 @@ export function AiChat({
   function stop() {
     abortRef.current?.abort();
   }
-
   function onQuickAction(a: { action: QuickAction; starter: string }) {
     setInput(a.starter);
     setPendingAction(a.action);
     inputRef.current?.focus();
   }
-
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (ghost) {
       if (e.key === "Tab" || e.key === "ArrowRight" || (e.key === "Enter" && !e.shiftKey)) {
@@ -374,7 +402,6 @@ export function AiChat({
       send(input, pendingAction);
     }
   }
-
   async function copyMessage(text: string, idx: number) {
     try {
       await navigator.clipboard.writeText(text);
@@ -396,115 +423,136 @@ export function AiChat({
     setTimeout(() => setCopiedIdx((v) => (v === idx ? null : v)), 1500);
   }
 
+  const title = !sel ? "" : sel.kind === "subject" ? sel.id : convs.find((c) => c.id === sel.id)?.title || "Nouvelle discussion";
+  const headTone = sel?.kind === "subject" ? toneColor(sel.id) : "var(--sky)";
   const showEmpty = messages.length === 0 && !loading;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-3 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
-      <div className="flex gap-3 items-start">
+      <div className="flex gap-3 items-stretch" style={{ minHeight: "calc(100dvh - 150px)" }}>
         {/* Panneau des discussions (à gauche, masquable) */}
         {panelOpen && (
           <aside className="ai-panel card p-2">
             <div className="flex items-center justify-between px-1.5 py-1 mb-1">
               <span className="text-sm font-semibold">Discussions</span>
-              <button
-                className="text-ink-3 hover:text-ink-2 p-1"
-                onClick={() => setPanelOpen(false)}
-                aria-label="Masquer les discussions"
-              >
-                <X size={16} aria-hidden />
-              </button>
+              <div className="flex items-center gap-1">
+                <button className="text-ink-2 hover:text-ink p-1" onClick={newConversation} aria-label="Nouvelle discussion">
+                  <Plus size={16} aria-hidden />
+                </button>
+                <button className="text-ink-3 hover:text-ink-2 p-1" onClick={() => setPanelOpen(false)} aria-label="Masquer le panneau">
+                  <X size={16} aria-hidden />
+                </button>
+              </div>
             </div>
-            <div className="flex flex-col gap-0.5 overflow-y-auto" style={{ maxHeight: "calc(100dvh - 230px)" }}>
-              {SUBJECTS.map((s) => {
-                const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
-                const activeS = s === subject;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => openSubject(s)}
-                    className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
-                    style={activeS ? { background: `color-mix(in srgb, ${toneColor(s)} 14%, transparent)` } : undefined}
-                  >
-                    <span className="rounded-full flex-none" style={dotStyle(s, 22)} aria-hidden />
-                    <span className="min-w-0 flex-1">
-                      <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
-                      {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
-                    </span>
-                  </button>
-                );
-              })}
+
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 210px)" }}>
+              {/* Section 1 : discussions libres */}
+              <div className="flex flex-col gap-0.5">
+                {convs.length === 0 ? (
+                  <p className="text-xs text-ink-3 px-2 py-1.5">Aucune discussion. Appuie sur + pour en créer une.</p>
+                ) : (
+                  convs.map((c) => {
+                    const activeC = sel?.kind === "conv" && sel.id === c.id;
+                    return (
+                      <div key={c.id} className="flex items-center gap-1">
+                        <button
+                          onClick={() => select({ kind: "conv", id: c.id })}
+                          className="flex-1 min-w-0 text-left rounded-xl px-2 py-2 text-sm truncate"
+                          style={activeC ? { background: "color-mix(in srgb, var(--sky) 14%, transparent)", fontWeight: 600 } : undefined}
+                        >
+                          {c.title || "Nouvelle discussion"}
+                        </button>
+                        <button className="text-ink-3 hover:text-coral p-1.5 flex-none" onClick={() => deleteConversation(c.id)} aria-label="Supprimer la discussion">
+                          <Trash2 size={14} aria-hidden />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Section 2 : matières */}
+              <p className="text-xs font-semibold text-ink-3 uppercase tracking-wide px-2 pt-3 pb-1">Matières</p>
+              <div className="flex flex-col gap-0.5">
+                {SUBJECTS.map((s) => {
+                  const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
+                  const activeS = sel?.kind === "subject" && sel.id === s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => select({ kind: "subject", id: s })}
+                      className="w-full flex items-center gap-2.5 rounded-xl px-2 py-2 text-left"
+                      style={activeS ? { background: `color-mix(in srgb, ${toneColor(s)} 14%, transparent)` } : undefined}
+                    >
+                      <span
+                        className="rounded-full flex-none"
+                        style={{ width: 20, height: 20, background: `color-mix(in srgb, ${toneColor(s)} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${toneColor(s)}` }}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
+                        {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </aside>
         )}
 
-        {/* Chat de la matière */}
-        <section className="flex-1 min-w-0">
+        {/* Chat */}
+        <section className="flex-1 min-w-0 flex flex-col">
           <header className="flex items-center gap-2 mb-3">
             {!panelOpen && (
-              <button
-                className="btn-ghost !px-2.5 !py-2"
-                onClick={() => setPanelOpen(true)}
-                aria-label="Afficher les discussions"
-              >
+              <button className="btn-ghost !px-2.5 !py-2" onClick={() => setPanelOpen(true)} aria-label="Afficher les discussions">
                 <PanelLeft size={18} aria-hidden />
               </button>
             )}
-            {subject ? (
+            {sel ? (
               <>
-                <span className="rounded-full flex-none" style={dotStyle(subject, 34)} aria-hidden />
+                <span className="rounded-full flex-none" style={{ width: 34, height: 34, background: `color-mix(in srgb, ${headTone} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${headTone}` }} aria-hidden />
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg font-semibold leading-tight truncate">{subject}</h1>
-                  <p className="text-xs text-ink-3 truncate">Discussion sur {subject.toLowerCase()}</p>
+                  <h1 className="text-lg font-semibold leading-tight truncate">{title}</h1>
+                  <p className="text-xs text-ink-3 truncate">
+                    {sel.kind === "subject" ? `Discussion sur ${sel.id.toLowerCase()}` : "Discussion libre"}
+                  </p>
                 </div>
                 {messages.length > 0 && (
-                  <button
-                    className="btn-ghost !px-3 !py-2"
-                    onClick={() => clearSubject(subject)}
-                    aria-label="Effacer cette discussion"
-                  >
+                  <button className="btn-ghost !px-3 !py-2" onClick={clearCurrent} aria-label="Effacer cette discussion">
                     <Trash2 size={18} aria-hidden />
                   </button>
                 )}
               </>
             ) : (
-              <h1 className="text-xl font-semibold flex-1">Discussions</h1>
+              <h1 className="text-xl font-semibold flex-1">Assistant Orbs</h1>
             )}
           </header>
 
           {!configured && (
-            <div
-              className="card p-4 mb-3 text-sm text-ink-2"
-              style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }}
-              role="status"
-            >
-              <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible dès
-              que la clé API aura été ajoutée côté serveur.
+            <div className="card p-4 mb-3 text-sm text-ink-2" style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }} role="status">
+              <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible dès que la clé API aura été ajoutée côté serveur.
             </div>
           )}
 
-          {!subject ? (
-            <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed">
-              {firstName ? `${firstName}, choisis` : "Choisis"} une matière {panelOpen ? "dans la liste à gauche" : "en ouvrant la liste"} pour commencer une discussion.
+          {!sel ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed max-w-sm">
+                {firstName ? `${firstName}, choisis` : "Choisis"} une discussion {panelOpen ? "à gauche" : "en ouvrant le panneau"} — une conversation libre, ou une matière — pour commencer.
+              </div>
             </div>
           ) : (
             <>
-              <div className="pb-40">
+              <div className="flex-1 pb-40">
                 {showEmpty ? (
                   <div className="card p-6 text-center flex flex-col items-center gap-3 mt-1">
-                    <h2 className="text-base font-semibold">Discussion sur {subject}</h2>
+                    <h2 className="text-base font-semibold">{sel.kind === "subject" ? `Discussion sur ${sel.id}` : "Nouvelle discussion"}</h2>
                     <p className="text-ink-2 text-sm max-w-[40ch] leading-relaxed">
-                      Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place. Tape{" "}
-                      <b>{tagPrefs.trigger}</b> pour une commande.
+                      Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place. Tape <b>{tagPrefs.trigger}</b> pour une commande.
                     </p>
                     <div className="flex flex-wrap justify-center gap-2 mt-1">
                       {QUICK_ACTIONS.map((a) => (
-                        <button
-                          key={a.action}
-                          className="chip hover:shadow-[var(--shadow-soft)] transition-shadow"
-                          style={{ cursor: "pointer" }}
-                          onClick={() => onQuickAction(a)}
-                          disabled={!configured}
-                        >
+                        <button key={a.action} className="chip hover:shadow-[var(--shadow-soft)] transition-shadow" style={{ cursor: "pointer" }} onClick={() => onQuickAction(a)} disabled={!configured}>
                           {a.label}
                         </button>
                       ))}
@@ -514,11 +562,7 @@ export function AiChat({
                   <div className="flex flex-col gap-3 mt-1">
                     {messages.map((m, i) =>
                       m.role === "user" ? (
-                        <div
-                          key={i}
-                          className="ml-auto max-w-[85%] rounded-[18px] px-3.5 py-2.5 text-[0.95rem] leading-relaxed whitespace-pre-wrap"
-                          style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--ink)" }}
-                        >
+                        <div key={i} className="ml-auto max-w-[85%] rounded-[18px] px-3.5 py-2.5 text-[0.95rem] leading-relaxed whitespace-pre-wrap" style={{ background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--ink)" }}>
                           {m.content}
                         </div>
                       ) : (
@@ -535,11 +579,7 @@ export function AiChat({
                             )}
                           </div>
                           {m.content && (
-                            <button
-                              className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
-                              onClick={() => copyMessage(m.content, i)}
-                              aria-label="Copier la réponse"
-                            >
+                            <button className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2" onClick={() => copyMessage(m.content, i)} aria-label="Copier la réponse">
                               {copiedIdx === i ? (
                                 <>
                                   <Check size={13} aria-hidden /> Copié
@@ -557,17 +597,10 @@ export function AiChat({
 
                     {error && (
                       <div className="mr-auto max-w-[92%]">
-                        <div
-                          className="card px-4 py-3 text-sm text-ink-2"
-                          style={{ background: "color-mix(in srgb, var(--coral) 10%, var(--glass))" }}
-                          role="alert"
-                        >
+                        <div className="card px-4 py-3 text-sm text-ink-2" style={{ background: "color-mix(in srgb, var(--coral) 10%, var(--glass))" }} role="alert">
                           {error}
                           {retry && (
-                            <button
-                              className="btn-ghost !py-1.5 !px-3 !text-sm mt-2 block"
-                              onClick={() => send(retry.text, retry.action)}
-                            >
+                            <button className="btn-ghost !py-1.5 !px-3 !text-sm mt-2 block" onClick={() => send(retry.text, retry.action)}>
                               Réessayer
                             </button>
                           )}
@@ -581,19 +614,12 @@ export function AiChat({
               </div>
 
               {/* Composeur */}
-              <div
-                className="sticky z-20 w-full"
-                style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}
-              >
+              <div className="sticky z-20 w-full" style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}>
                 {pendingAction && (
                   <div className="mb-1 flex justify-start">
                     <span className="chip" style={{ background: "color-mix(in srgb, var(--sky) 14%, transparent)" }}>
                       {QUICK_ACTIONS.find((a) => a.action === pendingAction)?.label}
-                      <button
-                        className="ml-1.5 text-ink-3 hover:text-ink-2"
-                        onClick={() => setPendingAction(null)}
-                        aria-label="Retirer l'action"
-                      >
+                      <button className="ml-1.5 text-ink-3 hover:text-ink-2" onClick={() => setPendingAction(null)} aria-label="Retirer l'action">
                         <X size={12} aria-hidden />
                       </button>
                     </span>
@@ -629,20 +655,11 @@ export function AiChat({
                     />
                   </div>
                   {loading ? (
-                    <button
-                      className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]"
-                      onClick={stop}
-                      aria-label="Arrêter la génération"
-                    >
+                    <button className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]" onClick={stop} aria-label="Arrêter la génération">
                       <Square size={16} aria-hidden fill="currentColor" />
                     </button>
                   ) : (
-                    <button
-                      className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]"
-                      onClick={() => send(input, pendingAction)}
-                      disabled={!configured || !input.trim()}
-                      aria-label="Envoyer"
-                    >
+                    <button className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]" onClick={() => send(input, pendingAction)} disabled={!configured || !input.trim()} aria-label="Envoyer">
                       <Send size={18} aria-hidden />
                     </button>
                   )}

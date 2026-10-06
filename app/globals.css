@@ -576,9 +576,9 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 .ai-panel {
   flex: none;
   width: 150px;
-  align-self: flex-start;
-  position: sticky;
-  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
 }
 @media (min-width: 640px) { .ai-panel { width: 220px; } }
 @media (min-width: 900px) { .ai-panel { width: 248px; } }
