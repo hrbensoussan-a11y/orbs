@@ -1,0 +1,199 @@
+// Orbs — schéma de données du journal.
+//
+// Base de dev : SQLite (zéro configuration, tourne partout).
+// Pour passer en production sur Postgres, il suffit de remplacer
+//   provider = "sqlite"  ->  provider = "postgresql"
+// et de pointer DATABASE_URL vers l'instance Postgres. Le reste du
+// modèle est écrit pour rester compatible (pas d'enum natif, tags en
+// relation, listes stockées en JSON string).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Profil / compte
+  firstName   String? // prénom
+  lastName    String? // nom
+  schoolClass String? // classe, ex. « Terminale S »
+  school      String? // établissement
+  avatar      String? // configuration de l'avatar (JSON)
+
+  // Espace famille
+  role              String    @default("student") // "student" | "parent"
+  familyCode        String?   @unique // code d'invitation temporaire (élève)
+  familyCodeExpires DateTime?
+  shareMood         Boolean   @default(false) // l'élève partage son humeur du journal
+  learnSnapshot     String? // résumé JSON de la progression Apprendre (synchro locale -> serveur)
+  learnSyncedAt     DateTime?
+
+  entries  Entry[]
+  tags     Tag[]
+  settings Settings?
+
+  children        FamilyLink[] @relation("ParentLinks")
+  parents         FamilyLink[] @relation("ChildLinks")
+  cheersSent      Cheer[]      @relation("CheerFrom")
+  cheersReceived  Cheer[]      @relation("CheerTo")
+  challengesSet   Challenge[]  @relation("ChallengeFrom")
+  challengesToDo  Challenge[]  @relation("ChallengeTo")
+}
+
+/// Lien parent <-> élève (créé quand le parent saisit le code famille).
+model FamilyLink {
+  id        String   @id @default(cuid())
+  parentId  String
+  parent    User     @relation("ParentLinks", fields: [parentId], references: [id], onDelete: Cascade)
+  childId   String
+  child     User     @relation("ChildLinks", fields: [childId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([parentId, childId])
+  @@index([childId])
+}
+
+/// Encouragement envoyé par un parent (sticker + petit mot).
+model Cheer {
+  id        String    @id @default(cuid())
+  fromId    String
+  from      User      @relation("CheerFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User      @relation("CheerTo", fields: [toId], references: [id], onDelete: Cascade)
+  sticker   String // emoji
+  message   String?
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@index([toId, createdAt])
+}
+
+/// Défi lancé par un parent, avec une récompense promise.
+model Challenge {
+  id          String    @id @default(cuid())
+  fromId      String
+  from        User      @relation("ChallengeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String
+  to          User      @relation("ChallengeTo", fields: [toId], references: [id], onDelete: Cascade)
+  kind        String // "streak" | "reviews" | "mastered" | "focus" | "journal"
+  target      Int
+  baseline    Int       @default(0) // valeur au lancement (défis cumulatifs)
+  reward      String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  cancelled   Boolean   @default(false)
+
+  @@index([toId, createdAt])
+  @@index([fromId, createdAt])
+}
+
+/// Préférences par utilisateur.
+model Settings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Apparence
+  theme    String @default("system") // "light" | "dark" | "system"
+  locale   String @default("fr")
+  font     String @default("serif")  // "serif" | "sans"
+  fontSize String @default("base")   // "sm" | "base" | "lg"
+
+  // Habitude / rappels (couche phase 2 — champs prêts)
+  reminderEnabled   Boolean @default(false)
+  reminderTime      String? // "21:00"
+  reminderFrequency String? // "daily" | "weekdays" | "custom"
+  streakGoal        Int? // objectif de régularité, en jours/semaine
+
+  // Verrouillage local (phase 3 — champs prêts)
+  pinLockEnabled Boolean @default(false)
+  pinHash        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Une entrée de journal.
+model Entry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title   String?
+  content String  @default("") // texte riche léger (Markdown)
+
+  // La date "journal" de l'entrée (jour dont on parle). Par défaut
+  // = aujourd'hui, mais peut être antidatée. La timeline et le
+  // rappel "il y a un an" s'appuient dessus.
+  entryDate DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Humeur (échelle 1-5 + emoji), optionnelle
+  mood      Int?
+  moodEmoji String?
+
+  // Contexte optionnel
+  location String?
+  weather  String?
+
+  // Guidage
+  promptText String? // le prompt suggéré affiché quand l'entrée a été guidée
+  template   String? // "gratitude" | "matin" | "soir" | "5min" ...
+
+  // États
+  favorite Boolean @default(false)
+  pinned   Boolean @default(false)
+  locked   Boolean @default(false) // entrée sensible (verrou spécifique)
+
+  // Trackers optionnels
+  energy     Int? // 1-5
+  sleepHours Float?
+  activities String? // JSON: string[]
+  people     String? // JSON: string[]
+
+  tags  Tag[]
+  media MediaAttachment[]
+
+  @@index([userId, entryDate])
+  @@index([userId, createdAt])
+}
+
+/// Tag / catégorie, propre à chaque utilisateur.
+model Tag {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String
+
+  entries Entry[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+/// Média attaché à une entrée (photos en priorité ; audio/vidéo plus tard).
+model MediaAttachment {
+  id       String @id @default(cuid())
+  entryId  String
+  entry    Entry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  url      String
+  type     String // "image" | "audio" | "video"
+  width    Int?
+  height   Int?
+  caption  String?
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
