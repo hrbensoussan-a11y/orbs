@@ -15,7 +15,9 @@ import { usePathname, useRouter } from "next/navigation";
 
 const SIZES = { sm: 46, md: 56, lg: 72 } as const;
 type SizeKey = keyof typeof SIZES;
-type Prefs = { hidden: boolean; size: SizeKey };
+const STYLE_KEYS = ["minimal", "neon", "aurora", "violet", "clair", "contour"] as const;
+type StyleKey = (typeof STYLE_KEYS)[number];
+type Prefs = { hidden: boolean; size: SizeKey; style: StyleKey };
 
 const EDGE = 8; // marge minimale avec les bords
 const DRAG_THRESHOLD = 6; // px avant de considérer que c'est un déplacement
@@ -29,12 +31,16 @@ function loadPrefs(): Prefs {
     const raw = localStorage.getItem(PREFS_KEY);
     if (raw) {
       const p = JSON.parse(raw);
-      return { hidden: !!p?.hidden, size: (SIZES as Record<string, number>)[p?.size] ? p.size : "md" };
+      return {
+        hidden: !!p?.hidden,
+        size: (SIZES as Record<string, number>)[p?.size] ? p.size : "md",
+        style: (STYLE_KEYS as readonly string[]).includes(p?.style) ? p.style : "minimal",
+      };
     }
   } catch {
     /* localStorage indisponible : réglages par défaut */
   }
-  return { hidden: false, size: "md" };
+  return { hidden: false, size: "md", style: "minimal" };
 }
 
 export function AiOrb() {
@@ -42,7 +48,7 @@ export function AiOrb() {
   const pathname = usePathname();
 
   const [pos, setPos] = useState<Pos | null>(null);
-  const [prefs, setPrefs] = useState<Prefs>({ hidden: false, size: "md" });
+  const [prefs, setPrefs] = useState<Prefs>({ hidden: false, size: "md", style: "minimal" });
   const posRef = useRef<Pos>({ x: 0, y: 0 });
   const prefsRef = useRef<Prefs>(prefs);
   const draggingRef = useRef(false);
@@ -148,6 +154,7 @@ export function AiOrb() {
     <button
       type="button"
       className="ai-orb"
+      data-orb-style={prefs.style}
       aria-label="Ouvrir l’assistant IA"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

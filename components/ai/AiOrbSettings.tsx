@@ -3,24 +3,39 @@
 // Réglages de la bulle IA flottante (voir AiOrb).
 // - Afficher / enlever la bulle.
 // - Taille : petite / moyenne / grande.
+// - Style : apparence de la bulle (6 styles, avec aperçu cliquable).
 // Tout est stocké en localStorage ("orbs.aiorb.prefs") et appliqué en direct
 // à la bulle via l'évènement "orbs:aiorb".
 
 import { useEffect, useState } from "react";
 
 const PREFS_KEY = "orbs.aiorb.prefs";
+
+const SIZE_KEYS = ["sm", "md", "lg"] as const;
+type SizeKey = (typeof SIZE_KEYS)[number];
 const SIZE_LABELS: { key: SizeKey; label: string }[] = [
   { key: "sm", label: "Petite" },
   { key: "md", label: "Moyenne" },
   { key: "lg", label: "Grande" },
 ];
-const SIZE_KEYS = ["sm", "md", "lg"] as const;
-type SizeKey = (typeof SIZE_KEYS)[number];
+
+const STYLE_KEYS = ["minimal", "neon", "aurora", "violet", "clair", "contour"] as const;
+type StyleKey = (typeof STYLE_KEYS)[number];
+const STYLE_LABELS: { key: StyleKey; label: string }[] = [
+  { key: "minimal", label: "Minimal" },
+  { key: "neon", label: "Néon" },
+  { key: "aurora", label: "Aurore" },
+  { key: "violet", label: "Violet" },
+  { key: "clair", label: "Clair" },
+  { key: "contour", label: "Contour" },
+];
+
 const PREVIEW_PX: Record<SizeKey, number> = { sm: 34, md: 42, lg: 54 };
 
 export function AiOrbSettings() {
   const [show, setShow] = useState(true);
   const [size, setSize] = useState<SizeKey>("md");
+  const [style, setStyle] = useState<StyleKey>("minimal");
 
   useEffect(() => {
     try {
@@ -30,6 +45,7 @@ export function AiOrbSettings() {
         /* eslint-disable react-hooks/set-state-in-effect */
         setShow(!p?.hidden);
         if (SIZE_KEYS.includes(p?.size)) setSize(p.size);
+        if (STYLE_KEYS.includes(p?.style)) setStyle(p.style);
         /* eslint-enable react-hooks/set-state-in-effect */
       }
     } catch {
@@ -37,9 +53,9 @@ export function AiOrbSettings() {
     }
   }, []);
 
-  function persist(nextShow: boolean, nextSize: SizeKey) {
+  function persist(nextShow: boolean, nextSize: SizeKey, nextStyle: StyleKey) {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ hidden: !nextShow, size: nextSize }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ hidden: !nextShow, size: nextSize, style: nextStyle }));
     } catch {
       /* ignore */
     }
@@ -49,14 +65,17 @@ export function AiOrbSettings() {
 
   function changeShow(v: boolean) {
     setShow(v);
-    persist(v, size);
+    persist(v, size, style);
   }
   function changeSize(v: SizeKey) {
     setSize(v);
-    persist(show, v);
+    persist(show, v, style);
+  }
+  function changeStyle(v: StyleKey) {
+    setStyle(v);
+    persist(show, size, v);
   }
 
-  const dot = PREVIEW_PX[size];
   return (
     <div className="flex flex-col gap-4">
       {/* Afficher / enlever */}
@@ -108,26 +127,50 @@ export function AiOrbSettings() {
         </div>
       </div>
 
-      {/* Aperçu du logo */}
-      <div className="flex items-center gap-3 border-t border-line pt-4">
-        <span className="text-sm text-ink-2 flex-1">Aperçu</span>
-        <span
-          aria-hidden
-          className="relative rounded-full flex-none transition-all"
-          style={{
-            width: dot,
-            height: dot,
-            background: "#17271f",
-            opacity: show ? 1 : 0.35,
-            boxShadow: "0 6px 16px rgba(0,0,0,.28)",
-          }}
+      {/* Style (apparence) */}
+      <div className="border-t border-line pt-4">
+        <p>Style</p>
+        <p className="text-sm text-ink-2">Choisis l’apparence de la bulle.</p>
+        <div
+          className="mt-3 flex flex-wrap gap-3"
+          role="group"
+          aria-label="Style de la bulle IA"
+          style={{ opacity: show ? 1 : 0.5 }}
         >
-          <span className="absolute rounded-full" style={{ inset: "8%", border: "1.5px solid rgba(121,224,172,.5)" }} />
-          <span
-            className="absolute rounded-full"
-            style={{ width: "30%", height: "30%", left: "54%", top: "30%", background: "#79e0ac" }}
-          />
-        </span>
+          {STYLE_LABELS.map((s) => {
+            const selected = style === s.key;
+            const d = PREVIEW_PX[size];
+            return (
+              <button
+                key={s.key}
+                type="button"
+                aria-pressed={selected}
+                aria-label={`Style ${s.label}`}
+                onClick={() => changeStyle(s.key)}
+                disabled={!show}
+                className="flex flex-col items-center gap-1.5 rounded-2xl px-3 py-2.5 transition-colors"
+                style={{
+                  cursor: show ? "pointer" : "default",
+                  border: "1px solid",
+                  borderColor: selected ? "var(--green)" : "var(--line)",
+                  background: selected ? "color-mix(in srgb, var(--green) 10%, transparent)" : "transparent",
+                }}
+              >
+                <span
+                  className="ai-orb ai-orb--sample"
+                  data-orb-style={s.key}
+                  aria-hidden
+                  style={{ width: d, height: d }}
+                >
+                  <span className="ai-orb-dot" />
+                </span>
+                <span className="text-xs" style={{ color: selected ? "var(--green-ink)" : "var(--ink-2)" }}>
+                  {s.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

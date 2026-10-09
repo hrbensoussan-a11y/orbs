@@ -537,6 +537,47 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 .ai-orb:active { cursor: grabbing; transform: scale(0.95); }
 .ai-orb:focus-visible { outline: 2px solid rgba(121, 224, 172, 0.8); outline-offset: 3px; }
 
+/* Styles personnalisables de la bulle (réglages → Style). "minimal" = défaut ci-dessus. */
+.ai-orb[data-orb-style="neon"] {
+  background: #0b1712;
+  box-shadow: var(--shadow-float), 0 0 0 1px rgba(121, 224, 172, 0.35), 0 0 22px rgba(56, 193, 114, 0.55), 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.ai-orb[data-orb-style="neon"]::before { border-color: rgba(121, 224, 172, 0.9); }
+.ai-orb[data-orb-style="neon"] .ai-orb-dot { background: #aef7cf; box-shadow: 0 0 14px rgba(121, 224, 172, 0.95); }
+
+.ai-orb[data-orb-style="aurora"] { background: linear-gradient(135deg, #38c172 0%, #14b8a6 52%, #5b9df0 100%); }
+.ai-orb[data-orb-style="aurora"]::before { border-color: rgba(255, 255, 255, 0.55); }
+.ai-orb[data-orb-style="aurora"] .ai-orb-dot { background: #ffffff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.75); }
+
+.ai-orb[data-orb-style="violet"] { background: linear-gradient(135deg, #6366f1 0%, #b48cf2 100%); }
+.ai-orb[data-orb-style="violet"]::before { border-color: rgba(255, 255, 255, 0.5); }
+.ai-orb[data-orb-style="violet"] .ai-orb-dot { background: #ffffff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.7); }
+
+.ai-orb[data-orb-style="clair"] {
+  background: #f3f6f4;
+  box-shadow: var(--shadow-float), inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+.ai-orb[data-orb-style="clair"]::before { border-color: rgba(56, 193, 114, 0.6); }
+.ai-orb[data-orb-style="clair"] .ai-orb-dot { background: #16a34a; box-shadow: 0 0 8px rgba(22, 163, 74, 0.5); }
+
+.ai-orb[data-orb-style="contour"] {
+  background: color-mix(in srgb, var(--green) 12%, rgba(23, 39, 31, 0.5));
+  border: 2px solid rgba(121, 224, 172, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.ai-orb[data-orb-style="contour"]::before { display: none; }
+.ai-orb[data-orb-style="contour"] .ai-orb-dot { background: #79e0ac; box-shadow: 0 0 10px rgba(121, 224, 172, 0.7); }
+
+/* Aperçu de la bulle dans les réglages : même rendu, mais dans le flux. */
+.ai-orb--sample {
+  position: relative;
+  cursor: pointer;
+  transition: transform var(--t-fast, 0.12s) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.ai-orb--sample:hover { transform: translateY(-1px); }
+.ai-orb--sample:active { transform: translateY(-1px); }
+
 /* ===================== Saisie IA avec suggestion fantôme ===================== */
 /* La zone de saisie et la couche « fantôme » partagent EXACTEMENT les mêmes
    métriques de texte pour que la suggestion grise s'aligne sur la frappe. */
