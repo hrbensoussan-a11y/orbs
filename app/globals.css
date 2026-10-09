@@ -100,6 +100,8 @@
   --fill: rgba(255, 247, 234, 0.55); --fill-2: rgba(255, 247, 234, 0.78);
   --canvas: #f4ead7; --vign: rgba(120, 80, 30, 0.16); --veil: rgba(255, 176, 84, 0.12);
   --highlight: inset 0 1px 0 rgba(255, 248, 235, 0.5);
+  /* Anti-lumière bleue : fond entièrement chaud, sans bleu ni violet. */
+  --m1: #ffe3c9; --m2: #ffeccf; --m3: #ffe6bf; --m4: #ffdcc0;
 }
 :root[data-theme="dark"] {
   --green-ink: #5fd08a;
@@ -111,6 +113,8 @@
   --highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.28);
   --shadow-float: 0 14px 40px rgba(0, 0, 0, 0.4);
+  /* Sombre : fond neutre et foncé, pas de pastel qui transparaît. */
+  --m1: #1a2430; --m2: #221c30; --m3: #15241d; --m4: #182230;
 }
 
 html { height: 100%; }
