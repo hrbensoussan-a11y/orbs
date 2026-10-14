@@ -63,6 +63,13 @@ export function StudySession({
     startRef.current = Date.now();
   }, []);
 
+  // Pendant l'étude : plein écran, sans barre du bas ni bulle IA (pour ne pas
+  // quitter sa session par erreur). Le CSS masque .bottom-nav / .ai-orb.
+  useEffect(() => {
+    document.body.classList.add("studying");
+    return () => document.body.classList.remove("studying");
+  }, []);
+
   const pool = useMemo(() => deck.cards.map((c) => c.d).filter(Boolean), [deck]);
 
   function finish(correctCount: number, total: number) {
@@ -197,7 +204,7 @@ function ivLabel(card: Card, q: number): string {
 function SmartCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
   const [shown, setShown] = useState(false);
   return (
-    <div className="card p-6 flex flex-col gap-5 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-5 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Terme</div>
       <p className="text-2xl font-semibold">{card.t}</p>
       {shown ? (
@@ -238,7 +245,7 @@ function SmartCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
 function Interro({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
   const [shown, setShown] = useState(false);
   return (
-    <div className="card p-6 flex flex-col gap-5 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-5 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Question</div>
       <p className="text-xl font-semibold leading-snug">{card.t}</p>
       {shown ? (
@@ -274,7 +281,7 @@ function Mcq({ card, pool, onAnswer }: { card: Card; pool: string[]; onAnswer: (
   const [picked, setPicked] = useState<string | null>(null);
 
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Quelle définition ?</div>
       <p className="text-xl font-semibold">{card.t}</p>
       <div className="flex flex-col gap-2.5 mt-2">
@@ -316,7 +323,7 @@ function WriteCard({ card, onAnswer }: { card: Card; onAnswer: (ok: boolean) => 
     setResult(ok);
   }
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Quel terme ?</div>
       <p className="text-lg leading-relaxed">{card.d}</p>
       {result === null ? (
@@ -380,7 +387,7 @@ function TrueFalse({ card, pool, onAnswer }: { card: Card; pool: string[]; onAns
     setAnswered(saysReal === isReal);
   }
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <p className="text-xl font-semibold">{card.t}</p>
       <div className="border-t border-line pt-3">
         <div className="text-xs font-medium text-ink-3 mb-1">Définition proposée</div>
@@ -421,7 +428,7 @@ function Flashcards({ deck, onFinish }: { deck: Deck; onFinish: (n: number) => v
       <span className="text-sm text-ink-2 display self-center">{i + 1} / {cards.length}</span>
       <button
         onClick={() => setFlip((f) => !f)}
-        className="card p-6 min-h-[44vh] flex items-center justify-center text-center"
+        className="card p-6 min-h-[calc(100dvh-280px)] flex items-center justify-center text-center"
       >
         <div>
           <div className="text-xs font-medium text-ink-3 mb-2">{flip ? "Définition" : "Terme"}</div>
@@ -588,7 +595,7 @@ function ClozeCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
   }
 
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Complète le passage</div>
       <p className="text-lg leading-loose">
         {tokens.map((tk, i) => {
@@ -659,7 +666,7 @@ function OrderCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
   }
 
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Remets dans le bon ordre</div>
       <p className="font-semibold">{card.t}</p>
       <div className="flex flex-col gap-2">
@@ -721,7 +728,7 @@ function MemorizeTest({ card, onGrade }: { card: Card; onGrade: (q: number) => v
   const [revealed, setRevealed] = useState(0);
   const done = revealed >= lines.length;
   return (
-    <div className="card p-6 flex flex-col gap-4 min-h-[46vh]">
+    <div className="card p-6 flex flex-col gap-4 min-h-[calc(100dvh-210px)]">
       <div className="text-xs font-medium text-ink-3">Récite de mémoire</div>
       <p className="font-semibold">{card.t}</p>
       <div className="flex flex-col gap-1 leading-relaxed">
@@ -799,7 +806,7 @@ function MemorizeLearn({ deck, onFinish }: { deck: Deck; onFinish: (n: number) =
           ))}
         </div>
       </div>
-      <div className="card p-6 min-h-[42vh]">
+      <div className="card p-6 min-h-[calc(100dvh-300px)]">
         <p className="font-semibold mb-3">{c.t}</p>
         <p className="leading-loose whitespace-pre-wrap">
           {tokens.map((t, idx) => {

@@ -23,7 +23,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import type { Deck, State } from "@/lib/learn/types";
-import { KIND_META, SUBJECT_TONE } from "@/lib/learn/types";
+import { KIND_META } from "@/lib/learn/types";
 import {
   load,
   save as storeSave,
@@ -45,6 +45,7 @@ import {
   deckFromShare,
 } from "@/lib/learn/share";
 import { summarize } from "@/lib/learn/summary";
+import { subjectColor, loadSubjectColors } from "@/lib/subjectColors";
 import { syncLearnSummary } from "@/app/actions/family";
 import type { LearnCtx } from "./ctx";
 import { CreateDeck } from "./CreateDeck";
@@ -171,13 +172,15 @@ function DeckCard({
   ctx,
   setView,
   onShare,
+  colors,
 }: {
   deck: Deck;
   ctx: LearnCtx;
   setView: (v: View) => void;
   onShare: (id: string) => void;
+  colors?: Record<string, string>;
 }) {
-  const tone = SUBJECT_TONE[deck.subject] || "green";
+  const hex = subjectColor(deck.subject, colors);
   const due = dueCount(deck);
   const pct = Math.round(deckProgress(deck) * 100);
   return (
@@ -195,8 +198,8 @@ function DeckCard({
           <span
             className="rounded-full px-2 py-0.5 font-medium"
             style={{
-              background: `color-mix(in srgb, var(--${tone}) 15%, transparent)`,
-              color: `var(--${tone === "green" ? "green-ink" : tone})`,
+              background: `color-mix(in srgb, ${hex} 16%, transparent)`,
+              color: `color-mix(in srgb, ${hex} 62%, var(--ink))`,
             }}
           >
             {deck.subject}
@@ -259,6 +262,19 @@ function Home({
   const today = dailyProgress(ctx.s);
   const [options, setOptions] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Couleurs personnalisées des matières (partagées avec l'IA / l'agenda).
+  const [subjColors, setSubjColors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const refresh = () => setSubjColors(loadSubjectColors());
+    refresh();
+    window.addEventListener("orbs:subjectcolors", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("orbs:subjectcolors", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   // Tri / dossiers par matière (préférence mémorisée).
   const [sort, setSort] = useState<SortKey>("subject");
@@ -466,8 +482,7 @@ function Home({
               {groupedSubjects.map((sub) => {
                 const arr = groups[sub];
                 const dueSum = arr.reduce((n, d) => n + dueCount(d), 0);
-                const tone = SUBJECT_TONE[sub] || "green";
-                const col = `var(--${tone === "green" ? "green-ink" : tone})`;
+                const col = subjectColor(sub, subjColors);
                 const collapsed = !!folded[sub];
                 return (
                   <section key={sub} className="flex flex-col gap-2.5">
@@ -495,7 +510,7 @@ function Home({
                     {!collapsed && (
                       <div className="flex flex-col gap-2.5">
                         {arr.map((d) => (
-                          <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} />
+                          <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} colors={subjColors} />
                         ))}
                       </div>
                     )}
@@ -506,7 +521,7 @@ function Home({
           ) : (
             <div className="flex flex-col gap-3 stagger">
               {flatDecks.map((d) => (
-                <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} />
+                <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} colors={subjColors} />
               ))}
             </div>
           )}

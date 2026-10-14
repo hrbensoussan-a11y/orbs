@@ -322,6 +322,10 @@ select.input { appearance: none; }
 .reading hr { border: none; border-top: 1px solid var(--glass-stroke); }
 
 /* ===================== Barre de navigation basse ===================== */
+/* Pendant une révision (voir StudySession) : plein écran sans barre ni bulle. */
+body.studying .bottom-nav { display: none; }
+body.studying .ai-orb { display: none !important; }
+
 .bottom-nav {
   position: fixed;
   left: 50%;
