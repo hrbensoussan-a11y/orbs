@@ -257,6 +257,83 @@ export async function generateCards(
   return cards;
 }
 
+/**
+ * Génère des cartes à partir d'une PHOTO de cours (vision). `imageUrl` est une
+ * data-URL (`data:image/...;base64,...`). Même traitement que `generateCards`
+ * mais le message utilisateur porte l'image. Lève une `AiError` en cas d'échec.
+ */
+export async function generateCardsFromImage(
+  system: string,
+  imageUrl: string,
+): Promise<GeneratedCard[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_CONFIG.timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AI_CONFIG.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: AI_CONFIG.model,
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Lis le texte visible sur cette photo de cours et crée les cartes de révision demandées.",
+              },
+              { type: "image_url", image_url: { url: imageUrl } },
+            ],
+          },
+        ],
+        max_completion_tokens: AI_CONFIG.maxCompletionTokens,
+        reasoning_effort: AI_CONFIG.reasoningEffort,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new AiError("timeout", "L'IA met trop de temps à lire la photo. Réessaie.", 504);
+    }
+    throw new AiError("network", "Impossible de contacter l'IA pour le moment.", 502);
+  }
+  clearTimeout(timer);
+
+  if (!res.ok) {
+    console.error(`[ai] cards(image): OpenAI a répondu ${res.status}`);
+    throw new AiError(
+      "upstream",
+      "L'IA n'a pas pu lire la photo. Réessaie avec une photo plus nette, ou recopie le texte.",
+      502,
+    );
+  }
+
+  let json: { choices?: { message?: { content?: string } }[] };
+  try {
+    json = (await res.json()) as typeof json;
+  } catch {
+    throw new AiError("bad_response", "Réponse de l'IA illisible.", 502);
+  }
+
+  const content = json.choices?.[0]?.message?.content ?? "";
+  const cards = parseCards(content);
+  if (!cards.length) {
+    throw new AiError(
+      "bad_response",
+      "L'IA n'a pas réussi à lire la photo. Prends une photo plus nette ou recopie le texte.",
+      502,
+    );
+  }
+  return cards;
+}
+
 /** Extrait un tableau [{t,d}] même si l'IA l'entoure de texte ou de ```json. */
 function parseCards(raw: string): GeneratedCard[] {
   let s = raw.trim();

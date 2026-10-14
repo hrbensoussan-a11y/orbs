@@ -8,16 +8,26 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
-import { generateCards, AiError } from "@/lib/ai/openai";
+import { generateCards, generateCardsFromImage, AiError } from "@/lib/ai/openai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const bodySchema = z.object({
-  text: z.string().trim().min(20, "Colle un peu plus de texte.").max(8000),
-  kind: z.enum(["definitions", "questions"]).default("definitions"),
-  subject: z.string().max(60).optional(),
-});
+// Soit du texte collé, soit une photo (data-URL image). Au moins l'un des deux.
+const bodySchema = z
+  .object({
+    text: z.string().trim().min(20, "Colle un peu plus de texte.").max(8000).optional(),
+    image: z
+      .string()
+      .regex(/^data:image\/(png|jpe?g|webp|gif);base64,/, "Image invalide.")
+      .max(7_000_000, "Photo trop lourde.")
+      .optional(),
+    kind: z.enum(["definitions", "questions"]).default("definitions"),
+    subject: z.string().max(60).optional(),
+  })
+  .refine((d) => !!d.text || !!d.image, {
+    message: "Donne du texte ou une photo.",
+  });
 
 function systemFor(kind: "definitions" | "questions", subject?: string): string {
   const role =
@@ -67,7 +77,7 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const { text, kind, subject } = parsed.data;
+  const { text, image, kind, subject } = parsed.data;
 
   const rate = checkRateLimit(user.id);
   if (!rate.ok) {
@@ -82,7 +92,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const cards = await generateCards(systemFor(kind, subject), text);
+    const sys = systemFor(kind, subject);
+    const cards = image
+      ? await generateCardsFromImage(sys, image)
+      : await generateCards(sys, text as string);
     return NextResponse.json({ cards, model: AI_CONFIG.model });
   } catch (err) {
     if (err instanceof AiError) {

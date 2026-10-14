@@ -25,6 +25,38 @@ const SEPS: { value: string; label: string }[] = [
   { value: "|", label: "Barre ( | )" },
 ];
 
+// Lit un fichier image et renvoie une data-URL réduite (≤ ~1600 px) pour
+// alléger l'envoi au serveur et aider la lecture par l'IA.
+async function imageFileToDataUrl(file: File, maxDim = 1600, quality = 0.85): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("read"));
+    r.readAsDataURL(file);
+  });
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error("img"));
+      im.src = dataUrl;
+    });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    if (scale >= 1 && dataUrl.length < 1_500_000) return dataUrl;
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const cx = canvas.getContext("2d");
+    if (!cx) return dataUrl;
+    cx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return dataUrl;
+  }
+}
+
 export function CreateDeck({
   ctx,
   editId,
@@ -67,6 +99,8 @@ export function CreateDeck({
   // Génération par l'IA (à partir du cours collé).
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  // Lecture d'une photo par l'IA.
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   const meta = KIND_META[kind];
   const isDefLike = kind === "definitions" || kind === "questions";
@@ -87,12 +121,48 @@ export function CreateDeck({
         (res.ignored ? ` · ${res.ignored} ligne(s) ignorée(s)` : ""),
     );
   }
-  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  // Photo → cartes : l'IA lit la photo du cours et en fait des cartes.
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (!f) return;
-    if (photo) URL.revokeObjectURL(photo);
-    setPhoto(URL.createObjectURL(f));
     e.target.value = "";
+    if (!f || photoLoading || aiLoading) return;
+    setAiError(null);
+    setPasteInfo(null);
+    if (photo) URL.revokeObjectURL(photo);
+    const preview = URL.createObjectURL(f);
+    setPhoto(preview);
+    setPhotoLoading(true);
+    try {
+      const image = await imageFileToDataUrl(f);
+      const res = await fetch("/api/ai/cards", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ image, kind: isDefLike ? kind : "definitions", subject }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.cards?.length) {
+        setAiError(
+          data?.message ||
+            "L'IA n'a pas pu lire la photo. Réessaie avec une photo plus nette, ou recopie le texte ci-dessous.",
+        );
+        return;
+      }
+      const made: Row[] = data.cards.map((c: Row) => ({
+        t: String(c.t || "").trim(),
+        d: String(c.d || "").trim(),
+      }));
+      const existing = rows.filter((r) => r.t.trim() || r.d.trim());
+      setRows([...existing, ...made]);
+      setPasteInfo(
+        `✨ ${made.length} carte${made.length > 1 ? "s" : ""} créée${made.length > 1 ? "s" : ""} à partir de ta photo — relis-les avant d'enregistrer.`,
+      );
+      URL.revokeObjectURL(preview);
+      setPhoto(null);
+    } catch {
+      setAiError("Connexion impossible. Vérifie ta connexion et réessaie.");
+    } finally {
+      setPhotoLoading(false);
+    }
   }
 
   // ---- Génération des cartes par l'IA (def/questions) ----
@@ -221,19 +291,35 @@ export function CreateDeck({
                 <div className="flex items-center gap-2 font-semibold">
                   <Zap size={17} className="text-amber" aria-hidden /> Coller mon cours d’un coup
                 </div>
-                <button className="btn-ghost !py-1.5" onClick={() => photoInput.current?.click()}>
-                  <Camera size={15} aria-hidden /> Photo
+                <button
+                  className="btn-ghost !py-1.5"
+                  onClick={() => photoInput.current?.click()}
+                  disabled={photoLoading || aiLoading}
+                >
+                  {photoLoading ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="ai-dot" />
+                      <span className="ai-dot" style={{ animationDelay: "0.15s" }} />
+                      <span className="ai-dot" style={{ animationDelay: "0.3s" }} />
+                      <span className="ml-1">Lecture…</span>
+                    </span>
+                  ) : (
+                    <>
+                      <Camera size={15} aria-hidden /> Photo
+                    </>
+                  )}
                 </button>
                 <input ref={photoInput} type="file" accept="image/*" hidden onChange={onPhoto} />
               </div>
               <p className="text-sm text-ink-2 mt-1 mb-3">
-                Colle ton cours : l’IA en fait des cartes toute seule. Ou écris
-                une ligne par carte et découpe toi-même.
+                Colle ton cours, ou prends-le en photo : l’IA en fait des cartes
+                toute seule. Tu peux aussi écrire une ligne par carte et découper
+                toi-même.
               </p>
               {photo && (
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1 text-sm text-ink-2">
-                    <span>Recopie le contenu ci-dessous 👇</span>
+                    <span>{photoLoading ? "L’IA lit ta photo…" : "Recopie le contenu ci-dessous 👇"}</span>
                     <button className="text-ink-3 hover:text-ink" onClick={() => { URL.revokeObjectURL(photo); setPhoto(null); }} aria-label="Retirer la photo">
                       <X size={16} aria-hidden />
                     </button>

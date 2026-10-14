@@ -3,6 +3,7 @@ import { requireStudent } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BottomNav } from "@/components/BottomNav";
 import { AiOrb } from "@/components/ai/AiOrb";
+import { FocusTimer } from "@/components/learn/FocusTimer";
 import { FONT_SIZES } from "@/lib/constants";
 
 export default async function AppLayout({
@@ -24,6 +25,7 @@ export default async function AppLayout({
       <main className="app-main w-full pb-28">{children}</main>
       <BottomNav />
       <AiOrb />
+      <FocusTimer />
     </div>
   );
 }
