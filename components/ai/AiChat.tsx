@@ -18,6 +18,8 @@ import {
   X,
   Plus,
   Pencil,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
@@ -41,6 +43,7 @@ type Conv = { id: string; title: string; messages: ChatMessage[] };
 type Sel = { kind: "subject" | "conv"; id: string } | null;
 
 const STORE_KEY = "orbs.ai.v2";
+const PANEL_KEY = "orbs.ai.panel"; // "0" = colonne « Discussions » masquée
 const MAX_HISTORY = 10;
 
 const SUBJECTS = [
@@ -109,6 +112,7 @@ export function AiChat({
   const [colorFor, setColorFor] = useState<string | null>(null); // matière dont le sélecteur est ouvert
   const [editingConv, setEditingConv] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [showPanel, setShowPanel] = useState(true); // colonne « Discussions » affichée ?
   const colorOf = (s: string) => subjectColor(s, subjColors);
 
   const endRef = useRef<HTMLDivElement>(null);
@@ -148,8 +152,24 @@ export function AiChat({
     setThreads(t);
     setConvs(c);
     setLoaded(true);
+    try {
+      if (localStorage.getItem(PANEL_KEY) === "0") setShowPanel(false);
+    } catch {
+      /* indisponible */
+    }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  function togglePanel() {
+    setShowPanel((v) => {
+      try {
+        localStorage.setItem(PANEL_KEY, v ? "0" : "1");
+      } catch {
+        /* indisponible */
+      }
+      return !v;
+    });
+  }
 
   const persist = useCallback((t: Threads, c: Conv[]) => {
     try {
@@ -467,120 +487,131 @@ export function AiChat({
   return (
     <div className="w-full px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
       <div className="flex gap-3 items-stretch" style={{ minHeight: "calc(100dvh - 150px)" }}>
-        {/* Panneau des discussions (à gauche) */}
-        <aside className="ai-panel card p-2">
-            <div className="flex items-center justify-between px-1.5 py-1 mb-1">
-              <span className="text-sm font-semibold">Discussions</span>
-              <button className="text-ink-2 hover:text-ink p-1" onClick={newConversation} aria-label="Nouvelle discussion">
-                <Plus size={16} aria-hidden />
-              </button>
-            </div>
+        {/* Panneau des discussions (à gauche, masquable) */}
+        {showPanel && (
+          <aside className="ai-panel card p-2">
+              <div className="flex items-center justify-between px-1.5 py-1 mb-1">
+                <span className="text-sm font-semibold">Discussions</span>
+                <button className="text-ink-2 hover:text-ink p-1" onClick={newConversation} aria-label="Nouvelle discussion">
+                  <Plus size={16} aria-hidden />
+                </button>
+              </div>
 
-            <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 210px)" }}>
-              {/* Section 1 : discussions libres */}
-              <div className="flex flex-col gap-0.5">
-                {convs.length === 0 ? (
-                  <p className="text-xs text-ink-3 px-2 py-1.5">Aucune discussion. Appuie sur + pour en créer une.</p>
-                ) : (
-                  convs.map((c) => {
-                    const activeC = sel?.kind === "conv" && sel.id === c.id;
+              <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 210px)" }}>
+                {/* Section 1 : discussions libres */}
+                <div className="flex flex-col gap-0.5">
+                  {convs.length === 0 ? (
+                    <p className="text-xs text-ink-3 px-2 py-1.5">Aucune discussion. Appuie sur + pour en créer une.</p>
+                  ) : (
+                    convs.map((c) => {
+                      const activeC = sel?.kind === "conv" && sel.id === c.id;
+                      return (
+                        <div key={c.id} className="flex items-center gap-1">
+                          {editingConv === c.id ? (
+                            <input
+                              autoFocus
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onBlur={commitRename}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  commitRename();
+                                } else if (e.key === "Escape") {
+                                  setEditingConv(null);
+                                }
+                              }}
+                              className="input flex-1 min-w-0 !py-1.5 !px-2 !text-sm"
+                              placeholder="Nom de la discussion"
+                              aria-label="Nom de la discussion"
+                            />
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => select({ kind: "conv", id: c.id })}
+                                onDoubleClick={() => startRename(c)}
+                                className="flex-1 min-w-0 text-left rounded-xl px-2 py-2 text-sm truncate"
+                                style={activeC ? { background: "color-mix(in srgb, var(--sky) 14%, transparent)", fontWeight: 600 } : undefined}
+                              >
+                                {c.title || "Nouvelle discussion"}
+                              </button>
+                              <button className="text-ink-3 hover:text-ink-2 p-1.5 flex-none" onClick={() => startRename(c)} aria-label="Renommer la discussion">
+                                <Pencil size={14} aria-hidden />
+                              </button>
+                              <button className="text-ink-3 hover:text-coral p-1.5 flex-none" onClick={() => deleteConversation(c.id)} aria-label="Supprimer la discussion">
+                                <Trash2 size={14} aria-hidden />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Section 2 : matières */}
+                <p className="text-xs font-semibold text-ink-3 uppercase tracking-wide px-2 pt-3 pb-1">Matières</p>
+                <div className="flex flex-col gap-0.5">
+                  {SUBJECTS.map((s) => {
+                    const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
+                    const activeS = sel?.kind === "subject" && sel.id === s;
+                    const col = colorOf(s);
                     return (
-                      <div key={c.id} className="flex items-center gap-1">
-                        {editingConv === c.id ? (
-                          <input
-                            autoFocus
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            onBlur={commitRename}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                commitRename();
-                              } else if (e.key === "Escape") {
-                                setEditingConv(null);
-                              }
-                            }}
-                            className="input flex-1 min-w-0 !py-1.5 !px-2 !text-sm"
-                            placeholder="Nom de la discussion"
-                            aria-label="Nom de la discussion"
+                      <div key={s}>
+                        <div
+                          className="w-full flex items-center gap-2.5 rounded-xl px-2 py-1.5"
+                          style={activeS ? { background: `color-mix(in srgb, ${col} 14%, transparent)` } : undefined}
+                        >
+                          <button
+                            onClick={() => setColorFor((v) => (v === s ? null : s))}
+                            aria-label={`Changer la couleur de ${s}`}
+                            className="rounded-full flex-none"
+                            style={{ width: 22, height: 22, background: `color-mix(in srgb, ${col} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${col}` }}
                           />
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => select({ kind: "conv", id: c.id })}
-                              onDoubleClick={() => startRename(c)}
-                              className="flex-1 min-w-0 text-left rounded-xl px-2 py-2 text-sm truncate"
-                              style={activeC ? { background: "color-mix(in srgb, var(--sky) 14%, transparent)", fontWeight: 600 } : undefined}
-                            >
-                              {c.title || "Nouvelle discussion"}
-                            </button>
-                            <button className="text-ink-3 hover:text-ink-2 p-1.5 flex-none" onClick={() => startRename(c)} aria-label="Renommer la discussion">
-                              <Pencil size={14} aria-hidden />
-                            </button>
-                            <button className="text-ink-3 hover:text-coral p-1.5 flex-none" onClick={() => deleteConversation(c.id)} aria-label="Supprimer la discussion">
-                              <Trash2 size={14} aria-hidden />
-                            </button>
-                          </>
+                          <button onClick={() => select({ kind: "subject", id: s })} className="min-w-0 flex-1 text-left py-1">
+                            <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
+                            {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
+                          </button>
+                        </div>
+                        {colorFor === s && (
+                          <div className="flex flex-wrap gap-1.5 px-2.5 py-2">
+                            {SUBJECT_PALETTE.map((c) => (
+                              <button
+                                key={c.hex}
+                                onClick={() => pickSubjectColor(s, c.hex)}
+                                aria-label={c.name}
+                                title={c.name}
+                                className="w-6 h-6 rounded-full"
+                                style={{
+                                  background: c.hex,
+                                  boxShadow: col.toLowerCase() === c.hex.toLowerCase()
+                                    ? `0 0 0 2px var(--canvas), 0 0 0 4px ${c.hex}`
+                                    : "inset 0 0 0 1px rgba(0,0,0,.15)",
+                                }}
+                              />
+                            ))}
+                          </div>
                         )}
                       </div>
                     );
-                  })
-                )}
+                  })}
+                </div>
               </div>
-
-              {/* Section 2 : matières */}
-              <p className="text-xs font-semibold text-ink-3 uppercase tracking-wide px-2 pt-3 pb-1">Matières</p>
-              <div className="flex flex-col gap-0.5">
-                {SUBJECTS.map((s) => {
-                  const count = threads[s]?.filter((m) => m.role === "user").length ?? 0;
-                  const activeS = sel?.kind === "subject" && sel.id === s;
-                  const col = colorOf(s);
-                  return (
-                    <div key={s}>
-                      <div
-                        className="w-full flex items-center gap-2.5 rounded-xl px-2 py-1.5"
-                        style={activeS ? { background: `color-mix(in srgb, ${col} 14%, transparent)` } : undefined}
-                      >
-                        <button
-                          onClick={() => setColorFor((v) => (v === s ? null : s))}
-                          aria-label={`Changer la couleur de ${s}`}
-                          className="rounded-full flex-none"
-                          style={{ width: 22, height: 22, background: `color-mix(in srgb, ${col} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${col}` }}
-                        />
-                        <button onClick={() => select({ kind: "subject", id: s })} className="min-w-0 flex-1 text-left py-1">
-                          <span className={`text-sm block truncate ${activeS ? "font-semibold" : "font-medium"}`}>{s}</span>
-                          {count > 0 && <span className="text-[0.68rem] text-ink-3">{count} msg</span>}
-                        </button>
-                      </div>
-                      {colorFor === s && (
-                        <div className="flex flex-wrap gap-1.5 px-2.5 py-2">
-                          {SUBJECT_PALETTE.map((c) => (
-                            <button
-                              key={c.hex}
-                              onClick={() => pickSubjectColor(s, c.hex)}
-                              aria-label={c.name}
-                              title={c.name}
-                              className="w-6 h-6 rounded-full"
-                              style={{
-                                background: c.hex,
-                                boxShadow: col.toLowerCase() === c.hex.toLowerCase()
-                                  ? `0 0 0 2px var(--canvas), 0 0 0 4px ${c.hex}`
-                                  : "inset 0 0 0 1px rgba(0,0,0,.15)",
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-        </aside>
+          </aside>
+        )}
 
         {/* Chat */}
         <section className="flex-1 min-w-0 flex flex-col">
           <header className="flex items-center gap-2 mb-3">
+            <button
+              className="btn-ghost !px-2.5 !py-2 flex-none"
+              onClick={togglePanel}
+              aria-label={showPanel ? "Masquer les discussions" : "Afficher les discussions"}
+              title={showPanel ? "Masquer les discussions" : "Afficher les discussions"}
+              aria-expanded={showPanel}
+            >
+              {showPanel ? <PanelLeftClose size={18} aria-hidden /> : <PanelLeftOpen size={18} aria-hidden />}
+            </button>
             {sel ? (
               <>
                 <span className="rounded-full flex-none" style={{ width: 34, height: 34, background: `color-mix(in srgb, ${headTone} 24%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${headTone}` }} aria-hidden />
@@ -611,6 +642,13 @@ export function AiChat({
             <div className="flex-1 flex items-center justify-center">
               <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed max-w-sm">
                 {firstName ? `${firstName}, choisis` : "Choisis"} une discussion à gauche — une conversation libre, ou une matière — pour commencer.
+                {!showPanel && (
+                  <div className="mt-4">
+                    <button className="btn-primary" onClick={togglePanel}>
+                      <PanelLeftOpen size={16} aria-hidden /> Afficher les discussions
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
