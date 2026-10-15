@@ -35,9 +35,9 @@ function tone(subject: string): string {
 
 type Tab = "devoirs" | "edt";
 
-export function AgendaApp() {
+export function AgendaApp({ initialTab = "devoirs" }: { initialTab?: Tab }) {
   const [state, setState] = useState<AgendaState | null>(null);
-  const [tab, setTab] = useState<Tab>("devoirs");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
