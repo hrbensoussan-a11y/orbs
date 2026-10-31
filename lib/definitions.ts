@@ -17,6 +17,32 @@ export const LoginSchema = z.object({
   password: z.string().min(1, { error: "Mot de passe requis." }),
 });
 
+/** E-mail seul (demande d'un code : connexion sans mot de passe, ou oubli). */
+export const EmailSchema = z.object({
+  email: z.email({ error: "Adresse e-mail invalide." }),
+});
+
+const codeField = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, { error: "Le code comporte 6 chiffres." });
+
+/** Saisie d'un code reçu par e-mail (vérification d'inscription, connexion). */
+export const VerifyCodeSchema = z.object({
+  email: z.email({ error: "Adresse e-mail invalide." }),
+  code: codeField,
+});
+
+/** Réinitialisation du mot de passe : code reçu + nouveau mot de passe. */
+export const ResetPasswordSchema = z.object({
+  email: z.email({ error: "Adresse e-mail invalide." }),
+  code: codeField,
+  password: z
+    .string()
+    .min(8, { error: "Le mot de passe doit faire au moins 8 caractères." })
+    .max(200),
+});
+
 /** Construit un dictionnaire champ -> messages, sans dépendre de l'API
  *  `.flatten()` (dépréciée en zod v4). */
 export function fieldErrorsFrom(error: z.ZodError): Record<string, string[]> {

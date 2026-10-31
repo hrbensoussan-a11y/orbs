@@ -17,12 +17,13 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  emailVerified DateTime? // date de vérification de l'e-mail (null = jamais vérifié)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Profil / compte
   firstName   String? // prénom
@@ -49,6 +50,30 @@ model User {
   cheersReceived  Cheer[]      @relation("CheerTo")
   challengesSet   Challenge[]  @relation("ChallengeFrom")
   challengesToDo  Challenge[]  @relation("ChallengeTo")
+}
+
+/// Code à usage unique envoyé par e-mail (connexion sans mot de passe).
+///
+/// - `codeHash` : le code n'est JAMAIS stocké en clair (haché comme un mot de passe).
+/// - `purpose`  : "verify" (inscription) | "login" (connexion par code) | "reset" (mot de passe oublié).
+/// - `payload`  : données en attente pour une inscription non encore vérifiée
+///                (JSON : nom, rôle, hash du mot de passe) — l'utilisateur n'est
+///                créé qu'une fois le code validé. null pour login/reset.
+/// - Un seul code actif à la fois par (email, purpose) : créer un nouveau code
+///   invalide les précédents. Expiration courte + nombre de tentatives limité.
+model EmailCode {
+  id         String    @id @default(cuid())
+  email      String // destinataire, toujours en minuscules
+  codeHash   String // hachage bcrypt du code (jamais le code en clair)
+  purpose    String // "verify" | "login" | "reset"
+  payload    String? // JSON optionnel (inscription en attente)
+  attempts   Int       @default(0) // saisies erronées (invalidé au-delà du seuil)
+  expiresAt  DateTime
+  consumedAt DateTime? // non-null = déjà utilisé (ne peut plus servir)
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
 }
 
 /// Lien parent <-> élève (créé quand le parent saisit le code famille).

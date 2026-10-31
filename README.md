@@ -142,6 +142,53 @@ clé, la voix se désactive proprement comme le reste de l'IA.
   badges, nombre de cartes par paquet — jamais le contenu des fiches) est
   synchronisé vers le serveur à chaque sauvegarde (`User.learnSnapshot`).
 
+## Connexion par e-mail (codes à usage unique)
+
+Orbs envoie un **code à 6 chiffres** par e-mail pour trois usages, en plus de la
+connexion classique par mot de passe :
+
+- **Inscription** : le compte n'est créé **qu'après** la saisie du code reçu
+  (vérifie l'adresse, empêche les comptes fantômes et le « squat » d'adresse).
+- **Connexion par code** : « Recevoir un code par e-mail » → connexion sans mot
+  de passe (pratique pour revenir sans rien retenir).
+- **Mot de passe oublié** : code par e-mail → choix d'un nouveau mot de passe.
+
+Sécurité : code tiré d'une source **cryptographique**, **jamais stocké en clair**
+(haché bcrypt), **expiration 10 min**, **5 tentatives** max, **cooldown 45 s** +
+**quota horaire** d'envoi, un seul code actif par usage, réponses **uniformes**
+(pas d'énumération de comptes). Logique dans `lib/codes.ts` ; server actions dans
+`app/actions/auth.ts` ; UI dans `components/AuthForm.tsx`.
+
+### Configuration de l'envoi
+
+Architecture : **navigateur → server action → service e-mail (API HTTPS)**. La
+clé reste **côté serveur**. Fournisseur : **Brevo** (`lib/mail/`), via son API
+HTTPS (pas de SMTP — passe même derrière un proxy HTTPS).
+
+```bash
+BREVO_API_KEY="xkeysib-…"               # SECRET, côté serveur uniquement
+MAIL_FROM_EMAIL="orbs.support@gmail.com" # expéditeur VÉRIFIÉ chez Brevo
+MAIL_FROM_NAME="Orbs"
+```
+
+Mise en place côté Brevo (gratuit, 300 e-mails/j) :
+
+1. Créer un compte sur [brevo.com](https://www.brevo.com) avec `orbs.support@gmail.com`.
+2. *Senders, Domains & Dedicated IPs* → **ajouter l'expéditeur** `orbs.support@gmail.com`
+   et cliquer le lien de confirmation reçu dans cette boîte.
+3. *SMTP & API* → **API Keys** → générer une clé (`xkeysib-…`) → la mettre dans `.env`.
+
+> **Sans clé** : l'app fonctionne normalement. En **développement**, les codes
+> s'affichent dans la **console du serveur** (`npm run dev`), donc tout le flux
+> est testable sans aucun service externe. En **production**, l'envoi échoue
+> proprement avec un message clair.
+>
+> **Délivrabilité** : envoyer *depuis* une adresse `@gmail.com` via un tiers peut
+> parfois tomber en spam (gmail.com n'est pas un domaine qu'on possède). Pour une
+> délivrabilité parfaite plus tard, brancher un **domaine dédié** (SPF/DKIM/DMARC)
+> et régler `MAIL_FROM_EMAIL` dessus + `MAIL_REPLY_TO="orbs.support@gmail.com"` —
+> **sans changer le code**.
+
 ## Direction artistique
 
 Le contrat visuel complet est dans [`direction-artistique.md`](./direction-artistique.md).
@@ -157,8 +204,10 @@ trackers…), `Tag`, `MediaAttachment`, `FamilyLink`, `Cheer`, `Challenge`.
 
 ## Sécurité — état et suite
 
-Mots de passe hachés (bcrypt), sessions signées httpOnly, isolation par
-utilisateur, export libre. **Pas encore de chiffrement de bout en bout** : prévu
+Mots de passe hachés (bcrypt), **vérification de l'e-mail à l'inscription** et
+**codes à usage unique** (hachés, expirants, limités — voir « Connexion par
+e-mail »), sessions signées httpOnly, isolation par utilisateur, export libre.
+**Pas encore de chiffrement de bout en bout** : prévu
 plus tard (le serveur peut lire les entrées aujourd'hui). L'export reste la
 meilleure sauvegarde.
 
