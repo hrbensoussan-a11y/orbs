@@ -98,6 +98,28 @@ fonctionne normalement**. Le modèle utilisé est un modèle de raisonnement
 (Chat Completions, `max_completion_tokens` + `reasoning_effort`, sans
 `temperature`).
 
+### Assistant vocal (l'élève parle, l'IA répond à voix haute)
+
+L'élève peut **parler** (bouton micro « appuyer pour parler ») et **écouter**
+la réponse. Bilingue **FR/EN** (langue détectée automatiquement). Trois voix au
+choix (Nova / Alloy / Shimmer) et une option « lire les réponses
+automatiquement », mémorisées en `localStorage`.
+
+Même principe de sécurité que le chat : tout passe par **notre backend**, la
+clé reste côté serveur. Deux routes :
+
+- `app/api/ai/voice/transcribe/route.ts` — voix → texte (modèle `OPENAI_STT_MODEL`).
+- `app/api/ai/voice/speak/route.ts` — texte → voix MP3 (modèle `OPENAI_TTS_MODEL`).
+
+Côté client : `components/ai/useSpeech.ts` (micro via `MediaRecorder`, lecture
+audio), `components/ai/VoicePicker.tsx` (choix de la voix), métadonnées des voix
+dans `lib/ai/voices.ts`, appels audio serveur dans `lib/ai/audio.ts`. Le micro
+n'utilise que des **API web standard**, compatibles avec un empaquetage natif
+**Capacitor** (App Store / Play Store) — il restera alors à déclarer la
+permission micro (`NSMicrophoneUsageDescription` sur iOS, `RECORD_AUDIO` sur
+Android). Réutilise la **même** `OPENAI_API_KEY` (accès audio requis) ; sans
+clé, la voix se désactive proprement comme le reste de l'IA.
+
 ## L'espace famille (fonctionnel)
 
 - À l'inscription : **Élève** ou **Parent**. Un parent arrive sur `/parent`

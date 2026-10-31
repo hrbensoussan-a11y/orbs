@@ -40,6 +40,20 @@ export const AI_CONFIG = {
   // sans exploser le coût. Valeurs possibles : none/low/medium/high/xhigh/max.
   reasoningEffort: effort(),
 
+  // --- Voix (assistant vocal : écoute + réponse à voix haute) ---
+  // Modèle de transcription (voix → texte). `whisper-1` détecte seul la
+  // langue (FR/EN) sans configuration. Changer ce seul champ suffit.
+  sttModel: process.env.OPENAI_STT_MODEL || "whisper-1",
+  // Modèle de synthèse (texte → voix). `gpt-4o-mini-tts` est naturel et
+  // bilingue (langue détectée depuis le texte). Les voix (nova/alloy/…)
+  // sont choisies par l'élève, voir lib/ai/voices.ts.
+  ttsModel: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts",
+  // Taille maximale d'un extrait audio envoyé pour transcription (octets).
+  // Garde-fou coût/abus : ~4 Mo ≈ 1 à 2 min de parole compressée.
+  maxAudioBytes: num("AI_MAX_AUDIO_BYTES", 4 * 1024 * 1024),
+  // Longueur maximale d'un texte lu à voix haute (caractères).
+  maxSpeakChars: num("AI_MAX_SPEAK_CHARS", 4000),
+
   // --- Limites de coût / taille ---
   // Les modèles de raisonnement consomment une partie de ce budget en
   // « réflexion » : trop bas => réponse coupée, voire vide. 1400 laisse de

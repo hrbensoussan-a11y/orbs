@@ -38,6 +38,9 @@ const bodySchema = z.object({
     .enum(["explain", "summarize", "flashcards", "questions", "revise", "mistake"])
     .optional(),
   tags: z.array(z.string().max(40)).max(20).optional(),
+  // `true` si le message a été dicté à l'oral : la réponse sera alors formulée
+  // pour être lue à voix haute (phrases naturelles, sans Markdown).
+  voice: z.boolean().optional(),
   context: z
     .object({
       subject: z.string().max(200).optional(),
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const { message, history, context, action, tags } = parsed.data;
+  const { message, history, context, action, tags, voice } = parsed.data;
 
   // 4) Limitation du débit (par utilisateur).
   const rate = checkRateLimit(user.id);
@@ -105,6 +108,7 @@ export async function POST(request: NextRequest) {
     { firstName: user.firstName || user.name, schoolClass: user.schoolClass },
     action,
     tags,
+    { voice },
   );
   const contextBlock = buildContextBlock(context);
 

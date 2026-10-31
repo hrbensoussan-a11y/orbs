@@ -34,6 +34,7 @@ export function buildSystemPrompt(
   profile: Profile,
   action?: QuickAction,
   tags?: string[],
+  opts?: { voice?: boolean },
 ): string {
   const name = (profile.firstName || "").trim();
   const klass = (profile.schoolClass || "").trim();
@@ -82,6 +83,18 @@ export function buildSystemPrompt(
       "Modes activés par l'élève (via des #) — adapte ta réponse en conséquence :",
       ...modeLines,
       "Si un mode nécessite des données que tu n'as pas reçues (agenda, cartes, journal…), demande-les simplement à l'élève plutôt que d'inventer. Ne révèle jamais de donnée privée sans que l'élève l'ait fournie.",
+    );
+  }
+
+  // Message posé À L'ORAL : l'élève parle et écoutera la réponse à voix haute.
+  if (opts?.voice) {
+    lines.push(
+      "",
+      "L'élève te parle à l'ORAL et écoutera ta réponse lue à voix haute :",
+      "- Réponds dans la langue de l'élève (français ou anglais selon sa question).",
+      "- Fais des phrases naturelles, comme à l'oral, et plutôt concises.",
+      "- N'utilise PAS de Markdown, ni de titres, ni de listes à puces, ni de blocs de code ou de symboles : seulement des phrases.",
+      "- Pour une formule ou un calcul, énonce-le en toutes lettres plutôt qu'avec des symboles.",
     );
   }
 

@@ -20,8 +20,15 @@ import {
   Pencil,
   PanelLeftClose,
   PanelLeftOpen,
+  Mic,
+  Volume2,
+  VolumeX,
+  Loader2,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
+import { useSpeech } from "@/components/ai/useSpeech";
+import { VoicePicker } from "@/components/ai/VoicePicker";
+import { DEFAULT_VOICE, toVoiceId, type VoiceId } from "@/lib/ai/voices";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
 import {
   SUBJECT_PALETTE,
@@ -44,6 +51,8 @@ type Sel = { kind: "subject" | "conv"; id: string } | null;
 
 const STORE_KEY = "orbs.ai.v2";
 const PANEL_KEY = "orbs.ai.panel"; // "0" = colonne « Discussions » masquée
+const VOICE_KEY = "orbs.ai.voice"; // voix choisie pour l'assistant vocal
+const AUTOPLAY_KEY = "orbs.ai.voiceplay"; // "0" = ne pas lire les réponses auto
 const MAX_HISTORY = 10;
 
 const SUBJECTS = [
@@ -113,7 +122,16 @@ export function AiChat({
   const [editingConv, setEditingConv] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [showPanel, setShowPanel] = useState(true); // colonne « Discussions » affichée ?
+  const [voice, setVoiceState] = useState<VoiceId>(DEFAULT_VOICE); // voix de l'assistant
+  const [autoplay, setAutoplayState] = useState(true); // lire les réponses vocales auto ?
   const colorOf = (s: string) => subjectColor(s, subjColors);
+
+  const speech = useSpeech();
+  // Refs lues dans les fonctions asynchrones (évite les closures périmées).
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+  const autoplayRef = useRef(autoplay);
+  autoplayRef.current = autoplay;
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -154,11 +172,31 @@ export function AiChat({
     setLoaded(true);
     try {
       if (localStorage.getItem(PANEL_KEY) === "0") setShowPanel(false);
+      const v = localStorage.getItem(VOICE_KEY);
+      if (v) setVoiceState(toVoiceId(v));
+      if (localStorage.getItem(AUTOPLAY_KEY) === "0") setAutoplayState(false);
     } catch {
       /* indisponible */
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
+
+  function setVoice(v: VoiceId) {
+    setVoiceState(v);
+    try {
+      localStorage.setItem(VOICE_KEY, v);
+    } catch {
+      /* indisponible */
+    }
+  }
+  function setAutoplay(v: boolean) {
+    setAutoplayState(v);
+    try {
+      localStorage.setItem(AUTOPLAY_KEY, v ? "1" : "0");
+    } catch {
+      /* indisponible */
+    }
+  }
 
   function togglePanel() {
     setShowPanel((v) => {
@@ -269,6 +307,10 @@ export function AiChat({
   }
 
   function select(s: Sel) {
+    // Coupe toute activité vocale de la discussion qu'on quitte.
+    speech.stopSpeaking();
+    speech.cancelRecording();
+    speech.clearError();
     setSel(s);
     setError(null);
     setRetry(null);
@@ -315,7 +357,11 @@ export function AiChat({
     setRetry(null);
   }
 
-  async function send(text: string, action: QuickAction | null) {
+  async function send(
+    text: string,
+    action: QuickAction | null,
+    opts?: { viaVoice?: boolean },
+  ) {
     const clean = text.trim();
     if (!clean || loading || !configured || !sel) return;
     const tgt = sel;
@@ -331,6 +377,7 @@ export function AiChat({
       setConvs((prev) => prev.map((c) => (c.id === tgt.id && !c.title ? { ...c, title: clean.slice(0, 40) } : c)));
     }
     const assistantIndex = base.length + 1;
+    const assistantSid = `${tgt.kind}:${tgt.id}:${assistantIndex}`;
 
     setInput("");
     setPendingAction(null);
@@ -377,6 +424,7 @@ export function AiChat({
           action: action ?? undefined,
           context: subjectForCtx ? { subject: subjectForCtx } : undefined,
           tags: extractTags(clean, tagPrefsRef.current.trigger),
+          voice: opts?.viaVoice || undefined,
         }),
         signal: ac.signal,
       });
@@ -407,6 +455,9 @@ export function AiChat({
         removeEmptyPlaceholder();
         setError("L’IA n’a pas renvoyé de réponse. Réessaie.");
         setRetry({ text: clean, action });
+      } else if (opts?.viaVoice && autoplayRef.current && speech.supported) {
+        // Question posée à l'oral → on lit la réponse à voix haute.
+        speech.speak(assistantSid, acc, voiceRef.current);
       }
     } catch (err) {
       if (flushTimer) {
@@ -434,6 +485,17 @@ export function AiChat({
 
   function stop() {
     abortRef.current?.abort();
+  }
+  // Bouton micro « appuyer pour parler » : 1er appui = enregistre, 2e = envoie.
+  async function onMic() {
+    if (!configured || loading || speech.transcribing) return;
+    if (speech.recording) {
+      const text = await speech.stopAndTranscribe();
+      if (text) send(text, pendingAction, { viaVoice: true });
+    } else {
+      speech.clearError();
+      await speech.startRecording();
+    }
   }
   function onQuickAction(a: { action: QuickAction; starter: string }) {
     setInput(a.starter);
@@ -621,6 +683,9 @@ export function AiChat({
                     {sel.kind === "subject" ? `Discussion sur ${sel.id.toLowerCase()}` : "Discussion libre"}
                   </p>
                 </div>
+                {speech.supported && configured && (
+                  <VoicePicker voice={voice} autoplay={autoplay} onVoice={setVoice} onAutoplay={setAutoplay} />
+                )}
                 {messages.length > 0 && (
                   <button className="btn-ghost !px-3 !py-2" onClick={clearCurrent} aria-label="Effacer cette discussion">
                     <Trash2 size={18} aria-hidden />
@@ -660,6 +725,11 @@ export function AiChat({
                     <p className="text-ink-2 text-sm max-w-[40ch] leading-relaxed">
                       Pose ta question. Je t’explique pas à pas, sans faire le travail à ta place.
                     </p>
+                    {speech.supported && configured && (
+                      <p className="text-ink-3 text-xs inline-flex items-center gap-1.5">
+                        <Mic size={13} aria-hidden /> Ou appuie sur le micro pour parler.
+                      </p>
+                    )}
                     <div className="flex flex-wrap justify-center gap-2 mt-1">
                       {QUICK_ACTIONS.map((a) => (
                         <button key={a.action} className="chip hover:shadow-[var(--shadow-soft)] transition-shadow" style={{ cursor: "pointer" }} onClick={() => onQuickAction(a)} disabled={!configured}>
@@ -689,17 +759,40 @@ export function AiChat({
                             )}
                           </div>
                           {m.content && (
-                            <button className="mt-1 ml-1 inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2" onClick={() => copyMessage(m.content, i)} aria-label="Copier la réponse">
-                              {copiedIdx === i ? (
-                                <>
-                                  <Check size={13} aria-hidden /> Copié
-                                </>
-                              ) : (
-                                <>
-                                  <Copy size={13} aria-hidden /> Copier
-                                </>
-                              )}
-                            </button>
+                            <div className="mt-1 ml-1 flex items-center gap-3">
+                              <button className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2" onClick={() => copyMessage(m.content, i)} aria-label="Copier la réponse">
+                                {copiedIdx === i ? (
+                                  <>
+                                    <Check size={13} aria-hidden /> Copié
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={13} aria-hidden /> Copier
+                                  </>
+                                )}
+                              </button>
+                              {speech.supported && configured && (() => {
+                                const sid = sel ? `${sel.kind}:${sel.id}:${i}` : String(i);
+                                const playing = speech.speakingId === sid;
+                                return (
+                                  <button
+                                    className="inline-flex items-center gap-1 text-xs text-ink-3 hover:text-ink-2"
+                                    onClick={() => (playing ? speech.stopSpeaking() : speech.speak(sid, m.content, voice))}
+                                    aria-label={playing ? "Arrêter la lecture" : "Écouter la réponse"}
+                                  >
+                                    {playing ? (
+                                      <>
+                                        <VolumeX size={13} aria-hidden /> Arrêter
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Volume2 size={13} aria-hidden /> Écouter
+                                      </>
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                            </div>
                           )}
                         </div>
                       ),
@@ -735,6 +828,28 @@ export function AiChat({
                     </span>
                   </div>
                 )}
+                {speech.error ? (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" style={{ background: "color-mix(in srgb, var(--coral) 14%, transparent)", color: "var(--ink)" }} role="alert">
+                      {speech.error.message}
+                      <button className="ml-1.5 text-ink-3 hover:text-ink-2" onClick={speech.clearError} aria-label="Fermer">
+                        <X size={12} aria-hidden />
+                      </button>
+                    </span>
+                  </div>
+                ) : speech.recording ? (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" style={{ background: "color-mix(in srgb, var(--coral) 14%, transparent)", color: "var(--ink)" }} aria-live="polite">
+                      <span className="voice-pulse" aria-hidden /> J’écoute… appuie sur le micro pour envoyer
+                    </span>
+                  </div>
+                ) : speech.transcribing ? (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" aria-live="polite">
+                      <Loader2 size={12} aria-hidden className="voice-spin mr-1" /> Transcription…
+                    </span>
+                  </div>
+                ) : null}
                 <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
                   <div className="relative flex-1 self-stretch">
                     {ghost && (
@@ -764,12 +879,29 @@ export function AiChat({
                       aria-label="Votre message"
                     />
                   </div>
+                  {speech.supported && (
+                    <button
+                      type="button"
+                      className={`btn-ghost !px-3.5 !py-2.5 !rounded-[16px] flex-none${speech.recording ? " voice-rec" : ""}`}
+                      onClick={onMic}
+                      disabled={!configured || loading || speech.transcribing}
+                      aria-label={speech.recording ? "Arrêter et envoyer" : "Parler à l'assistant"}
+                      aria-pressed={speech.recording}
+                      title={speech.recording ? "Arrêter et envoyer" : "Parler"}
+                    >
+                      {speech.transcribing ? (
+                        <Loader2 size={18} aria-hidden className="voice-spin" />
+                      ) : (
+                        <Mic size={18} aria-hidden />
+                      )}
+                    </button>
+                  )}
                   {loading ? (
-                    <button className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px]" onClick={stop} aria-label="Arrêter la génération">
+                    <button className="btn-ghost !px-3.5 !py-2.5 !rounded-[16px] flex-none" onClick={stop} aria-label="Arrêter la génération">
                       <Square size={16} aria-hidden fill="currentColor" />
                     </button>
                   ) : (
-                    <button className="btn-primary !px-3.5 !py-2.5 !rounded-[16px]" onClick={() => send(input, pendingAction)} disabled={!configured || !input.trim()} aria-label="Envoyer">
+                    <button className="btn-primary !px-3.5 !py-2.5 !rounded-[16px] flex-none" onClick={() => send(input, pendingAction)} disabled={!configured || !input.trim()} aria-label="Envoyer">
                       <Send size={18} aria-hidden />
                     </button>
                   )}

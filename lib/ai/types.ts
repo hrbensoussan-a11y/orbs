@@ -38,6 +38,8 @@ export type ChatRequest = {
   history?: ChatMessage[];
   context?: OrbsContext;
   action?: QuickAction;
+  /** Message dicté à l'oral : réponse formulée pour la lecture à voix haute. */
+  voice?: boolean;
 };
 
 /** Réponse renvoyée par le backend (aucun secret, aucune donnée inutile). */

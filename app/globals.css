@@ -423,6 +423,32 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 .ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sky); display: inline-block; animation: aiDot 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .ai-dot { animation: none; opacity: 0.6; } }
 
+/* ===================== Voix (micro + lecture) ===================== */
+/* Bouton micro en cours d'enregistrement : halo qui pulse, teinte corail. */
+.voice-rec {
+  background: var(--coral) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  animation: voiceGlow 1.5s ease-in-out infinite;
+}
+@keyframes voiceGlow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--coral) 50%, transparent); }
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--coral) 0%, transparent); }
+}
+/* Petit point « en écoute » dans le bandeau d'état. */
+.voice-pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--coral); display: inline-block; margin-right: 5px;
+  animation: voiceDot 1s ease-in-out infinite;
+}
+@keyframes voiceDot { 0%, 100% { opacity: 0.4; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.1); } }
+/* Spinner de transcription. */
+.voice-spin { animation: voiceSpin 0.9s linear infinite; }
+@keyframes voiceSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .voice-rec, .voice-pulse, .voice-spin { animation: none; }
+}
+
 /* ===================== Espace famille ===================== */
 .role-tile {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
