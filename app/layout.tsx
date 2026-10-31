@@ -33,7 +33,11 @@ const APPEARANCE_INIT = `try{var a=JSON.parse(localStorage.getItem('orbs.appeara
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="fr">
+    // `suppressHydrationWarning` : le script d'apparence ci-dessous pose
+    // data-theme / data-bg / --dim sur <html> AVANT l'hydratation (anti-flash),
+    // ce que le HTML serveur ne contient pas. On indique à React que cette
+    // différence sur <html> est voulue (elle ne concerne que cet élément).
+    <html lang="fr" suppressHydrationWarning>
       <body>
         <Script id="orbs-appearance" strategy="beforeInteractive">
           {APPEARANCE_INIT}
