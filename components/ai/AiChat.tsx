@@ -24,6 +24,12 @@ import {
   Volume2,
   VolumeX,
   Loader2,
+  Sparkles,
+  GraduationCap,
+  FileText,
+  Lightbulb,
+  Target,
+  type LucideIcon,
 } from "lucide-react";
 import { Markdown } from "@/components/Markdown";
 import { useSpeech } from "@/components/ai/useSpeech";
@@ -77,6 +83,20 @@ const QUICK_ACTIONS: { action: QuickAction; label: string; starter: string }[] =
   { action: "revise", label: "M'aider à réviser", starter: "Aide-moi à réviser " },
 ];
 
+// Suggestions de l'accueil IA (zone centrale, aucune discussion ouverte).
+const HOME_SUGGESTIONS: {
+  label: string;
+  starter: string;
+  action: QuickAction | null;
+  icon: LucideIcon;
+  tone: "lilac" | "sky" | "amber" | "coral";
+}[] = [
+  { label: "Aide pour un devoir", starter: "Aide-moi pour mon devoir : ", action: "revise", icon: GraduationCap, tone: "lilac" },
+  { label: "Résumer un chapitre", starter: "Résume-moi le chapitre sur ", action: "summarize", icon: FileText, tone: "sky" },
+  { label: "Expliquer une notion", starter: "Explique-moi la notion de ", action: "explain", icon: Lightbulb, tone: "amber" },
+  { label: "Préparer un contrôle", starter: "Aide-moi à préparer mon contrôle sur ", action: "revise", icon: Target, tone: "coral" },
+];
+
 function newId(): string {
   try {
     return crypto.randomUUID();
@@ -102,7 +122,6 @@ function loadStore(): { threads: Threads; convs: Conv[] } {
 }
 
 export function AiChat({
-  firstName,
   configured,
 }: {
   firstName?: string | null;
@@ -381,11 +400,18 @@ export function AiChat({
     opts?: { viaVoice?: boolean },
   ) {
     const clean = text.trim();
-    if (!clean || loading || !configured || !sel) return;
-    const tgt = sel;
+    if (!clean || loading || !configured) return;
+    // Aucune discussion ouverte (accueil IA) : on en crée une à la volée.
+    let tgt = sel;
+    let base = messages;
+    if (!tgt) {
+      const conv: Conv = { id: newId(), title: "", messages: [] };
+      setConvs((prev) => [conv, ...prev]);
+      tgt = { kind: "conv", id: conv.id };
+      setSel(tgt);
+      base = [];
+    }
     const subjectForCtx = tgt.kind === "subject" ? tgt.id : undefined;
-
-    const base = messages;
     applyTo(tgt, (msgs) => [
       ...msgs,
       { role: "user", content: clean },
@@ -520,6 +546,13 @@ export function AiChat({
     setInput(a.starter);
     setPendingAction(a.action);
     inputRef.current?.focus();
+  }
+  // Suggestion de l'accueil : pré-remplit le champ (fonctionne même sans
+  // discussion ouverte — l'envoi en crée une automatiquement).
+  function onHomeSuggestion(s: { starter: string; action: QuickAction | null }) {
+    setInput(s.starter);
+    setPendingAction(s.action);
+    setTimeout(() => inputRef.current?.focus(), 20);
   }
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (ghost) {
@@ -712,7 +745,7 @@ export function AiChat({
                 )}
               </>
             ) : (
-              <h1 className="text-xl font-semibold flex-1">Assistant Orbs</h1>
+              <div className="flex-1" />
             )}
           </header>
 
@@ -723,21 +756,36 @@ export function AiChat({
           )}
 
           {!sel ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="card p-8 text-center text-ink-2 text-sm leading-relaxed max-w-sm">
-                {firstName ? `${firstName}, choisis` : "Choisis"} une discussion à gauche — une conversation libre, ou une matière — pour commencer.
-                {!showPanel && (
-                  <div className="mt-4">
-                    <button className="btn-primary" onClick={togglePanel}>
-                      <PanelLeftOpen size={16} aria-hidden /> Afficher les discussions
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-2 pb-6">
+              <span className="icon-chip lilac" style={{ width: 56, height: 56, borderRadius: 18 }} aria-hidden>
+                <Sparkles size={26} />
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-semibold mt-5">Discuter avec l’IA</h1>
+              <p className="text-ink-2 text-sm sm:text-base max-w-[46ch] leading-relaxed mt-2">
+                Pose tes questions, demande de l’aide pour tes devoirs, révise un chapitre ou explore un sujet.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-7 w-full max-w-xl">
+                {HOME_SUGGESTIONS.map((s) => {
+                  const Icon = s.icon;
+                  return (
+                    <button
+                      key={s.label}
+                      onClick={() => onHomeSuggestion(s)}
+                      disabled={!configured}
+                      className="card flex items-center gap-3 px-4 py-3.5 text-left hover:shadow-[var(--shadow-float)] transition-shadow disabled:opacity-55"
+                      style={{ cursor: configured ? "pointer" : "default" }}
+                    >
+                      <span className={`icon-chip ${s.tone} flex-none`} style={{ width: 38, height: 38 }} aria-hidden>
+                        <Icon size={19} />
+                      </span>
+                      <span className="text-sm font-medium">{s.label}</span>
                     </button>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             </div>
           ) : (
-            <>
-              <div className="flex-1 pb-40">
+            <div className="flex-1 pb-40">
                 {showEmpty ? (
                   <div className="card p-6 text-center flex flex-col items-center gap-3 mt-1">
                     <h2 className="text-base font-semibold">{sel.kind === "subject" ? `Discussion sur ${sel.id}` : "Nouvelle discussion"}</h2>
@@ -833,10 +881,11 @@ export function AiChat({
                     <div ref={endRef} className="scroll-mb-44" />
                   </div>
                 )}
-              </div>
+            </div>
+          )}
 
-              {/* Composeur */}
-              <div className="sticky z-20 w-full" style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}>
+          {/* Composeur — toujours affiché (accueil IA ou discussion ouverte) */}
+          <div className="sticky z-20 w-full" style={{ bottom: "calc(env(safe-area-inset-bottom,0px) + 86px)" }}>
                 {pendingAction && (
                   <div className="mb-1 flex justify-start">
                     <span className="chip" style={{ background: "color-mix(in srgb, var(--sky) 14%, transparent)" }}>
@@ -928,9 +977,7 @@ export function AiChat({
                     </button>
                   )}
                 </div>
-              </div>
-            </>
-          )}
+          </div>
         </section>
       </div>
     </div>
