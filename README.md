@@ -90,7 +90,7 @@ Dans `.env` (voir `.env.example` pour toutes les options) :
 
 ```bash
 OPENAI_API_KEY="sk-..."       # SECRET, côté serveur uniquement
-OPENAI_MODEL="gpt-5.6-terra"  # changer de modèle = changer cette ligne
+OPENAI_MODEL="gpt-5.6-terra"  # modèle par défaut (repli de Terra + cartes)
 ```
 
 Sans clé, l'IA s'affiche comme « non configurée » et **le reste d'Orbs
@@ -98,12 +98,39 @@ fonctionne normalement**. Le modèle utilisé est un modèle de raisonnement
 (Chat Completions, `max_completion_tokens` + `reasoning_effort`, sans
 `temperature`).
 
+#### Modes de réflexion — Luna & Terra
+
+Le chat propose deux modes, sélectionnables à tout moment **dans une même
+conversation** (sélecteur sous le champ de saisie) :
+
+- **Luna** — réflexion _moyenne_ : tâches quotidiennes et questions courantes.
+  Mode **par défaut**, et celui utilisé par l'**assistant vocal**.
+- **Terra** — réflexion _poussée_ : problèmes complexes, analyse approfondie.
+
+Changer de mode **ne crée pas de nouvelle discussion** et **n'efface rien** :
+même identifiant, même historique, appliqué à la réponse suivante. Seuls le
+**modèle** et l'**effort de raisonnement** changent — la personnalité, la voix,
+la langue et les préférences restent **communes** (`lib/ai/persona.ts`). La
+configuration des modes est **centralisée** dans `lib/ai/config.ts`
+(`resolveMode`) et pilotée par variables d'environnement (voir `.env.example`) :
+
+```bash
+OPENAI_MODEL_LUNA="gpt-5.6-luna"        # modèle du mode Luna (moyen)
+OPENAI_MODEL_TERRA="gpt-5.6-terra"      # modèle du mode Terra (repli: OPENAI_MODEL)
+OPENAI_REASONING_EFFORT_LUNA="medium"   # effort de Luna
+OPENAI_REASONING_EFFORT_TERRA="high"    # effort de Terra
+```
+
 ### Assistant vocal (l'élève parle, l'IA répond à voix haute)
 
 L'élève peut **parler** (bouton micro « appuyer pour parler ») et **écouter**
 la réponse. Bilingue **FR/EN** (langue détectée automatiquement). Trois voix au
 choix (Nova / Alloy / Shimmer) et une option « lire les réponses
 automatiquement », mémorisées en `localStorage`.
+
+Les réponses vocales utilisent **toujours Luna** (réflexion moyenne, formulée
+pour la lecture à voix haute), même si **Terra** est sélectionné dans le chat
+texte — la règle est appliquée côté serveur (`app/api/ai/chat/route.ts`).
 
 Même principe de sécurité que le chat : tout passe par **notre backend**, la
 clé reste côté serveur. Deux routes :

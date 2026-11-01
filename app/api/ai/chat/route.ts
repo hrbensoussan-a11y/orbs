@@ -10,10 +10,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
-import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
+import { AI_CONFIG, aiConfigured, resolveMode } from "@/lib/ai/config";
 import { buildSystemPrompt, buildContextBlock } from "@/lib/ai/persona";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { streamChatCompletion, AiError } from "@/lib/ai/openai";
+import { AUDIO_MODE_ID, toModeId } from "@/lib/ai/modes";
 import type { ChatMessage } from "@/lib/ai/types";
 
 // Runtime Node (nécessaire pour Prisma via getCurrentUser + fetch sortant).
@@ -37,6 +38,9 @@ const bodySchema = z.object({
   action: z
     .enum(["explain", "summarize", "flashcards", "questions", "revise", "mistake"])
     .optional(),
+  // Mode de réflexion choisi dans le chat (Luna = moyen, Terra = poussé).
+  // Absent/inconnu → mode par défaut. Les messages vocaux forcent Luna.
+  mode: z.enum(["luna", "terra"]).optional(),
   tags: z.array(z.string().max(40)).max(20).optional(),
   // `true` si le message a été dicté à l'oral : la réponse sera alors formulée
   // pour être lue à voix haute (phrases naturelles, sans Markdown).
@@ -88,7 +92,13 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const { message, history, context, action, tags, voice } = parsed.data;
+  const { message, history, context, action, tags, voice, mode } = parsed.data;
+
+  // Mode effectif : les interactions VOCALES utilisent toujours Luna (réponse
+  // concise, lue à voix haute), même si Terra est sélectionné dans le chat.
+  // Sinon, le mode choisi par l'élève (défaut si absent).
+  const effectiveMode = voice ? AUDIO_MODE_ID : toModeId(mode);
+  const { model, reasoningEffort } = resolveMode(effectiveMode);
 
   // 4) Limitation du débit (par utilisateur).
   const rate = checkRateLimit(user.id);
@@ -121,7 +131,10 @@ export async function POST(request: NextRequest) {
   //    réseau, timeout) reviennent en JSON avec le bon code HTTP ; une fois le
   //    flux commencé (200), le texte arrive au fur et à mesure.
   try {
-    const stream = await streamChatCompletion(system, messages);
+    const stream = await streamChatCompletion(system, messages, {
+      model,
+      reasoningEffort,
+    });
     return new Response(stream, {
       status: 200,
       headers: {

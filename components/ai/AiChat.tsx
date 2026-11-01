@@ -28,7 +28,9 @@ import {
 import { Markdown } from "@/components/Markdown";
 import { useSpeech } from "@/components/ai/useSpeech";
 import { VoicePicker } from "@/components/ai/VoicePicker";
+import { ModeSelector } from "@/components/ai/ModeSelector";
 import { DEFAULT_VOICE, toVoiceId, type VoiceId } from "@/lib/ai/voices";
+import { DEFAULT_MODE_ID, toModeId, type AiModeId } from "@/lib/ai/modes";
 import type { ChatMessage, QuickAction } from "@/lib/ai/types";
 import {
   SUBJECT_PALETTE,
@@ -53,6 +55,7 @@ const STORE_KEY = "orbs.ai.v2";
 const PANEL_KEY = "orbs.ai.panel"; // "0" = colonne « Discussions » masquée
 const VOICE_KEY = "orbs.ai.voice"; // voix choisie pour l'assistant vocal
 const AUTOPLAY_KEY = "orbs.ai.voiceplay"; // "0" = ne pas lire les réponses auto
+const MODE_KEY = "orbs.ai.mode"; // mode de réflexion (luna | terra)
 const MAX_HISTORY = 10;
 
 const SUBJECTS = [
@@ -124,6 +127,7 @@ export function AiChat({
   const [showPanel, setShowPanel] = useState(true); // colonne « Discussions » affichée ?
   const [voice, setVoiceState] = useState<VoiceId>(DEFAULT_VOICE); // voix de l'assistant
   const [autoplay, setAutoplayState] = useState(true); // lire les réponses vocales auto ?
+  const [mode, setModeState] = useState<AiModeId>(DEFAULT_MODE_ID); // mode de réflexion
   const colorOf = (s: string) => subjectColor(s, subjColors);
 
   const speech = useSpeech();
@@ -132,6 +136,8 @@ export function AiChat({
   voiceRef.current = voice;
   const autoplayRef = useRef(autoplay);
   autoplayRef.current = autoplay;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -175,6 +181,8 @@ export function AiChat({
       const v = localStorage.getItem(VOICE_KEY);
       if (v) setVoiceState(toVoiceId(v));
       if (localStorage.getItem(AUTOPLAY_KEY) === "0") setAutoplayState(false);
+      const m = localStorage.getItem(MODE_KEY);
+      if (m) setModeState(toModeId(m));
     } catch {
       /* indisponible */
     }
@@ -193,6 +201,16 @@ export function AiChat({
     setAutoplayState(v);
     try {
       localStorage.setItem(AUTOPLAY_KEY, v ? "1" : "0");
+    } catch {
+      /* indisponible */
+    }
+  }
+  // Changement de mode : s'applique à la prochaine réponse, sans toucher à la
+  // conversation courante (même id, même historique).
+  function setMode(m: AiModeId) {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
     } catch {
       /* indisponible */
     }
@@ -424,6 +442,7 @@ export function AiChat({
           action: action ?? undefined,
           context: subjectForCtx ? { subject: subjectForCtx } : undefined,
           tags: extractTags(clean, tagPrefsRef.current.trigger),
+          mode: modeRef.current,
           voice: opts?.viaVoice || undefined,
         }),
         signal: ac.signal,
@@ -850,6 +869,9 @@ export function AiChat({
                     </span>
                   </div>
                 ) : null}
+                <div className="mb-1.5 flex items-center">
+                  <ModeSelector mode={mode} onMode={setMode} disabled={!configured} />
+                </div>
                 <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
                   <div className="relative flex-1 self-stretch">
                     {ghost && (

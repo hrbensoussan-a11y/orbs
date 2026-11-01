@@ -7,6 +7,8 @@
 // La clé OpenAI n'est lue QUE dans ce module serveur et n'est jamais
 // renvoyée au navigateur.
 
+import type { AiModeId } from "./modes";
+
 function num(name: string, fallback: number): number {
   const raw = process.env[name];
   const n = raw == null || raw === "" ? NaN : Number(raw);
@@ -72,4 +74,61 @@ export const AI_CONFIG = {
 /** L'IA est-elle configurée côté serveur ? (clé présente) */
 export function aiConfigured(): boolean {
   return AI_CONFIG.apiKey.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Résolution SERVEUR du modèle + effort pour chaque mode (Luna / Terra).
+//
+// Les deux modes partagent toute la chaîne (persona, contexte, streaming) :
+// seuls le MODÈLE et l'EFFORT de raisonnement changent. Tout est piloté par des
+// variables d'environnement, jamais en dur côté client :
+//
+//   OPENAI_MODEL_LUNA             (défaut: gpt-5.6-luna)
+//   OPENAI_MODEL_TERRA            (défaut: OPENAI_MODEL ou gpt-5.6-terra)
+//   OPENAI_REASONING_EFFORT_LUNA  (défaut: medium)
+//   OPENAI_REASONING_EFFORT_TERRA (défaut: OPENAI_REASONING_EFFORT ou high)
+//
+// Terra conserve son comportement actuel : s'il n'a pas de variable dédiée, il
+// retombe sur OPENAI_MODEL / OPENAI_REASONING_EFFORT (la configuration
+// existante). Luna est le nouveau mode « quotidien », plus léger.
+//
+// NOTE : les modèles gpt-5.6 Luna/Terra sont la famille de raisonnement déjà
+// visée par le projet (voir lib/ai/openai.ts). Si votre fournisseur nomme le
+// modèle « moyen » autrement, renseignez OPENAI_MODEL_LUNA en conséquence.
+
+function env(name: string): string | undefined {
+  const v = process.env[name];
+  return v == null || v === "" ? undefined : v;
+}
+
+function validEffort(value: string | undefined, fallback: string): string {
+  const v = (value ?? fallback).toLowerCase();
+  return REASONING_EFFORTS.has(v) ? v : fallback;
+}
+
+/** Identifiant de modèle utilisé par un mode donné. */
+export function modeModel(mode: AiModeId): string {
+  if (mode === "luna") return env("OPENAI_MODEL_LUNA") || "gpt-5.6-luna";
+  // Terra : rétro-compatible avec l'ancienne variable unique OPENAI_MODEL.
+  return env("OPENAI_MODEL_TERRA") || AI_CONFIG.model;
+}
+
+/** Effort de raisonnement utilisé par un mode donné. */
+export function modeReasoningEffort(mode: AiModeId): string {
+  if (mode === "luna") {
+    return validEffort(env("OPENAI_REASONING_EFFORT_LUNA"), "medium");
+  }
+  // Terra : variable dédiée, sinon l'ancienne globale, sinon « high » (poussé).
+  return validEffort(
+    env("OPENAI_REASONING_EFFORT_TERRA") || env("OPENAI_REASONING_EFFORT"),
+    "high",
+  );
+}
+
+/** Couple { modèle, effort } prêt à être envoyé à l'API pour ce mode. */
+export function resolveMode(mode: AiModeId): {
+  model: string;
+  reasoningEffort: string;
+} {
+  return { model: modeModel(mode), reasoningEffort: modeReasoningEffort(mode) };
 }

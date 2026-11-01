@@ -33,11 +33,16 @@ type OpenAiMessage = { role: "system" | "user" | "assistant"; content: string };
  * le début du flux (auth upstream, réseau, timeout de connexion…).
  *
  * `system` = personnalité Orbs (+ contexte). `messages` = historique + message.
+ * `opts.model` / `opts.reasoningEffort` sélectionnent le mode (Luna / Terra) ;
+ * sans eux, on retombe sur la configuration par défaut (AI_CONFIG).
  */
 export async function streamChatCompletion(
   system: string,
   messages: ChatMessage[],
+  opts?: { model?: string; reasoningEffort?: string },
 ): Promise<ReadableStream<Uint8Array>> {
+  const model = opts?.model || AI_CONFIG.model;
+  const reasoningEffort = opts?.reasoningEffort || AI_CONFIG.reasoningEffort;
   const payload: OpenAiMessage[] = [
     { role: "system", content: system },
     ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -67,10 +72,10 @@ export async function streamChatCompletion(
         Authorization: `Bearer ${AI_CONFIG.apiKey}`,
       },
       body: JSON.stringify({
-        model: AI_CONFIG.model,
+        model,
         messages: payload,
         max_completion_tokens: AI_CONFIG.maxCompletionTokens,
-        reasoning_effort: AI_CONFIG.reasoningEffort,
+        reasoning_effort: reasoningEffort,
         stream: true,
         stream_options: { include_usage: true },
       }),
