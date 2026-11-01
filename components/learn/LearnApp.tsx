@@ -21,6 +21,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   ChevronUp,
+  Sparkles,
+  BarChart3,
 } from "lucide-react";
 import type { Deck, State } from "@/lib/learn/types";
 import { KIND_META } from "@/lib/learn/types";
@@ -32,10 +34,12 @@ import {
   toggleFav,
 } from "@/lib/learn/store";
 import { deckProgress, dueCount } from "@/lib/learn/sm2";
+import { dueTotal } from "@/lib/learn/review";
 import {
   levelFromXp,
   levelProgress,
   dailyProgress,
+  retentionStats,
 } from "@/lib/learn/progress";
 import {
   exportJSON,
@@ -51,6 +55,7 @@ import type { LearnCtx } from "./ctx";
 import { CreateDeck } from "./CreateDeck";
 import { StudyPicker, type Mode } from "./StudyPicker";
 import { StudySession } from "./StudySession";
+import { DailyReview } from "./DailyReview";
 import { FOCUS_OPEN_EVENT } from "@/lib/learn/focus";
 
 /** Ouvre la fenêtre de concentration (minuteur global monté dans le layout). */
@@ -64,6 +69,7 @@ function openFocus() {
 
 type View =
   | { name: "home" }
+  | { name: "review" }
   | { name: "create"; editId?: string }
   | { name: "pick"; deckId: string }
   | { name: "study"; deckId: string; mode: Mode };
@@ -119,7 +125,9 @@ export function LearnApp() {
   const ctx: LearnCtx = { s: state, save };
 
   let body: React.ReactNode;
-  if (view.name === "create") {
+  if (view.name === "review") {
+    body = <DailyReview ctx={ctx} onDone={() => setView({ name: "home" })} />;
+  } else if (view.name === "create") {
     body = (
       <CreateDeck ctx={ctx} editId={view.editId} onDone={() => setView({ name: "home" })} />
     );
@@ -260,7 +268,10 @@ function Home({
   const prog = levelProgress(xp);
   const goal = ctx.s.settings.dailyGoal;
   const today = dailyProgress(ctx.s);
+  const dueAll = dueTotal(ctx.s);
+  const rs = retentionStats(ctx.s);
   const [options, setOptions] = useState(false);
+  const [showProg, setShowProg] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Couleurs personnalisées des matières (partagées avec l'IA / l'agenda).
@@ -413,14 +424,84 @@ function Home({
         </div>
       </div>
 
+      {/* Révision du jour : toutes matières mélangées (interleaving) */}
+      {dueAll > 0 && (
+        <button
+          onClick={() => setView({ name: "review" })}
+          className="card p-4 mb-5 w-full text-left flex items-center gap-3.5 !border-[var(--green)]/60 transition hover:-translate-y-[2px] hover:shadow-[var(--shadow-float)]"
+        >
+          <span className="icon-chip green shrink-0">
+            <Sparkles size={20} strokeWidth={1.9} aria-hidden />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="font-semibold block">Révision du jour</span>
+            <span className="text-sm text-ink-2">
+              {dueAll} carte{dueAll > 1 ? "s" : ""} à réviser, toutes matières mélangées.
+            </span>
+          </span>
+          <span className="btn-primary !py-1.5 shrink-0 pointer-events-none">Réviser</span>
+        </button>
+      )}
+
       <div className="flex items-center gap-2 mb-4">
         <button className="btn-primary" onClick={() => setView({ name: "create" })}>
           <Plus size={16} aria-hidden /> Nouveau paquet
         </button>
-        <button className="btn-ghost !py-1.5 ml-auto" onClick={() => setOptions((o) => !o)}>
+        <button className="btn-ghost !py-1.5 ml-auto" onClick={() => setShowProg((o) => !o)}>
+          <BarChart3 size={15} aria-hidden /> Progrès
+        </button>
+        <button className="btn-ghost !py-1.5" onClick={() => setOptions((o) => !o)}>
           <SlidersHorizontal size={15} aria-hidden /> Options
         </button>
       </div>
+
+      {showProg && (
+        <div className="card p-4 mb-5 flex flex-col gap-4">
+          <div>
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="font-semibold inline-flex items-center gap-1.5">
+                <BarChart3 size={15} aria-hidden /> Mémorisation
+              </span>
+              {rs.cards > 0 && (
+                <span className="text-ink-2">{Math.round(rs.retention * 100)}% maîtrisé</span>
+              )}
+            </div>
+            {rs.cards === 0 ? (
+              <p className="text-sm text-ink-3">Crée des cartes pour suivre ta progression.</p>
+            ) : (
+              <>
+                <div className="h-2.5 rounded-full overflow-hidden bg-fill flex">
+                  <div className="h-full" style={{ width: `${(rs.mastered / rs.cards) * 100}%`, background: "var(--green)" }} />
+                  <div className="h-full" style={{ width: `${(rs.learning / rs.cards) * 100}%`, background: "var(--amber)" }} />
+                </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-ink-2">
+                  <span><b className="text-green-ink">{rs.mastered}</b> maîtrisées</span>
+                  <span><b className="text-amber">{rs.learning}</b> en cours</span>
+                  <span><b>{rs.neu}</b> nouvelles</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {rs.fragile.length > 0 && (
+            <div className="border-t border-line pt-3">
+              <p className="text-sm font-semibold">Cartes fragiles</p>
+              <p className="text-xs text-ink-3 mb-2">Souvent oubliées — à revoir en priorité.</p>
+              <div className="flex flex-wrap gap-1.5">
+                {rs.fragile.map((f, i) => (
+                  <span
+                    key={i}
+                    className="chip"
+                    style={{ color: `color-mix(in srgb, ${subjectColor(f.subject, subjColors)} 62%, var(--ink))` }}
+                  >
+                    {f.t.slice(0, 32)} · {f.lapses}×
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {options && (
         <div className="card p-4 mb-5 flex flex-col gap-3">

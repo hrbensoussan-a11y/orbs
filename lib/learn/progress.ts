@@ -75,6 +75,38 @@ export function masteredCount(state: State): number {
   return n;
 }
 
+export type FragileCard = { t: string; subject: string; lapses: number };
+export type RetentionStats = {
+  cards: number;
+  neu: number; // nouvelles (jamais revues)
+  learning: number; // en cours
+  mastered: number; // maîtrisées
+  retention: number; // 0..1 : maîtrisées / (en cours + maîtrisées)
+  fragile: FragileCard[]; // cartes les plus souvent oubliées
+};
+
+/** Vue d'ensemble de la mémorisation, tous paquets confondus (feedback). */
+export function retentionStats(state: State): RetentionStats {
+  let cards = 0,
+    neu = 0,
+    learning = 0,
+    mastered = 0;
+  const fragile: FragileCard[] = [];
+  for (const d of Object.values(state.decks)) {
+    for (const c of d.cards) {
+      cards += 1;
+      const m = mastery(c);
+      if (m === "new") neu += 1;
+      else if (m === "learning") learning += 1;
+      else mastered += 1;
+      if (c.lapses >= 2) fragile.push({ t: c.t, subject: d.subject, lapses: c.lapses });
+    }
+  }
+  const seen = learning + mastered;
+  fragile.sort((a, b) => b.lapses - a.lapses);
+  return { cards, neu, learning, mastered, retention: seen ? mastered / seen : 0, fragile: fragile.slice(0, 8) };
+}
+
 type Badge = { id: string; label: string; ok: (s: State) => boolean };
 export const BADGES: Badge[] = [
   { id: "first-deck", label: "Premier paquet", ok: (s) => Object.keys(s.decks).length >= 1 },
