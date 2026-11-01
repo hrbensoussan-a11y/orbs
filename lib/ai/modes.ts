@@ -27,12 +27,12 @@ export const AI_MODES: readonly AiModeMeta[] = [
   {
     id: "luna",
     label: "Moyenne",
-    description: "Tâches quotidiennes et questions courantes.",
+    description: "Devoirs, tâches quotidiennes et questions courantes.",
   },
   {
     id: "terra",
     label: "Poussée",
-    description: "Problèmes complexes et analyse approfondie.",
+    description: "Problèmes complexes, projets et analyse approfondie.",
   },
 ] as const;
 
