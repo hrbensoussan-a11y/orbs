@@ -14,6 +14,13 @@ import {
 import { load as loadLearn } from "@/lib/learn/store";
 import { dueCount } from "@/lib/learn/sm2";
 import { loadAgenda, dateKey } from "@/lib/agenda/store";
+import {
+  loadNotifSettings,
+  saveNotifSettings,
+  notifPermission,
+  requestNotifPermission,
+  NOTIF_EVENT,
+} from "@/lib/agenda/notifications";
 
 type Reminder = {
   key: string;
@@ -23,11 +30,10 @@ type Reminder = {
   tone: string;
 };
 
-const NOTIF_DAY_KEY = "orbs.rappels.notified";
-
 export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
   const [reminders, setReminders] = useState<Reminder[] | null>(null);
-  const [notif, setNotif] = useState<"unsupported" | "default" | "granted" | "denied">(
+  const [enabled, setEnabled] = useState(false);
+  const [perm, setPerm] = useState<"unsupported" | "default" | "granted" | "denied">(
     "default",
   );
 
@@ -92,48 +98,32 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReminders(list);
-
-    // État des notifications navigateur
-    try {
-      if (typeof Notification === "undefined") setNotif("unsupported");
-      else setNotif(Notification.permission as "default" | "granted" | "denied");
-    } catch {
-      setNotif("unsupported");
-    }
-
-    // Notification résumé (au plus une fois par jour, si autorisé)
-    try {
-      if (
-        typeof Notification !== "undefined" &&
-        Notification.permission === "granted" &&
-        list.length > 0
-      ) {
-        const today = dateKey();
-        if (localStorage.getItem(NOTIF_DAY_KEY) !== today) {
-          localStorage.setItem(NOTIF_DAY_KEY, today);
-          new Notification("Orbs — ta journée", {
-            body: list.map((r) => "• " + r.label).join("\n"),
-          });
-        }
-      }
-    } catch {
-      /* ignore */
-    }
   }, [wroteToday]);
 
-  async function enableNotifications() {
-    try {
-      if (typeof Notification === "undefined") return;
-      const perm = await Notification.requestPermission();
-      setNotif(perm as "default" | "granted" | "denied");
-      if (perm === "granted") {
-        new Notification("Rappels activés ✓", {
-          body: "Orbs te rappellera tes révisions et tes devoirs.",
-        });
-      }
-    } catch {
-      /* ignore */
+  // État des rappels (réglage partagé + permission navigateur).
+  useEffect(() => {
+    function refresh() {
+      setEnabled(loadNotifSettings().enabled);
+      setPerm(notifPermission());
     }
+    refresh();
+    window.addEventListener(NOTIF_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(NOTIF_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  // Déclenchement des rappels (sonnerie + notification) : géré globalement par
+  // NotificationScheduler, pour que ça marche sur toutes les pages d'Orbs.
+
+  async function enableNotifications() {
+    const p = await requestNotifPermission();
+    setPerm(p);
+    const s = loadNotifSettings();
+    saveNotifSettings({ ...s, enabled: true });
+    setEnabled(true);
   }
 
   // Avant l'hydratation client : on ne rend rien (évite tout décalage serveur).
@@ -143,7 +133,7 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
     <section className="card p-5">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-semibold">Aujourd’hui</h2>
-        {notif === "default" && (
+        {!enabled ? (
           <button
             onClick={enableNotifications}
             className="chip inline-flex items-center gap-1"
@@ -151,11 +141,14 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
           >
             <Bell size={13} aria-hidden /> Activer les rappels
           </button>
-        )}
-        {notif === "granted" && (
-          <span className="chip inline-flex items-center gap-1" style={{ color: "var(--green-ink)" }}>
+        ) : (
+          <Link
+            href="/settings"
+            className="chip inline-flex items-center gap-1"
+            style={{ color: "var(--green-ink)" }}
+          >
             <BellRing size={13} aria-hidden /> Rappels activés
-          </span>
+          </Link>
         )}
       </div>
 
@@ -187,10 +180,16 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
         </div>
       )}
 
-      {notif === "granted" && (
+      {enabled && (
         <p className="text-xs text-ink-3 mt-3">
-          Les rappels dans le navigateur arrivent quand tu ouvres Orbs. Les
-          notifications même app fermée seront ajoutées avec la version en ligne.
+          {perm === "denied"
+            ? "Les notifications sont bloquées par le navigateur, mais la sonnerie joue quand Orbs est ouvert. "
+            : "Les rappels arrivent avec leur sonnerie quand Orbs est ouvert. "}
+          Choisis ta sonnerie dans les{" "}
+          <Link href="/settings" className="underline">
+            réglages
+          </Link>
+          .
         </p>
       )}
     </section>

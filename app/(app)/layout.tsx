@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { BottomNav } from "@/components/BottomNav";
 import { AiOrb } from "@/components/ai/AiOrb";
 import { FocusTimer } from "@/components/learn/FocusTimer";
+import { NotificationScheduler } from "@/components/agenda/NotificationScheduler";
 import { FONT_SIZES } from "@/lib/constants";
 
 export default async function AppLayout({
@@ -26,6 +27,7 @@ export default async function AppLayout({
       <BottomNav />
       <AiOrb />
       <FocusTimer />
+      <NotificationScheduler />
     </div>
   );
 }

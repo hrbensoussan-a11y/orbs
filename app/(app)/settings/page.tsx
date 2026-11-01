@@ -7,6 +7,7 @@ import { logout } from "@/app/actions/auth";
 import { AppearanceButton } from "@/components/AppearanceButton";
 import { AiOrbSettings } from "@/components/ai/AiOrbSettings";
 import { AiTagsSettings } from "@/components/ai/AiTagsSettings";
+import { NotificationSettings } from "@/components/agenda/NotificationSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,16 @@ export default async function SettingsPage() {
             Enregistrer
           </button>
         </form>
+      </section>
+
+      {/* Notifications */}
+      <section className="card p-5">
+        <h2 className="font-semibold mb-1">Notifications</h2>
+        <p className="text-sm text-ink-2 mb-4">
+          Un rappel sonore quand un cours approche ou que des devoirs t’attendent.
+          Choisis ta sonnerie et quand être prévenu·e.
+        </p>
+        <NotificationSettings />
       </section>
 
       {/* Bulle IA */}
