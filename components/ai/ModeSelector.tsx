@@ -123,12 +123,11 @@ export function ModeSelector({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Mode de réflexion : ${current.label} — ${current.tagline}. Changer de mode.`}
-        title={`${current.label} — ${current.tagline}`}
+        aria-label={`Mode de réflexion : ${current.label}. Changer de mode.`}
+        title={`Mode de réflexion : ${current.label}`}
       >
         <CurrentIcon size={15} aria-hidden style={{ color: "var(--sky)" }} />
         <span className="font-semibold">{current.label}</span>
-        <span className="hidden sm:inline text-ink-3 font-normal">· {current.tagline}</span>
         <ChevronDown
           size={14}
           aria-hidden
@@ -191,7 +190,6 @@ export function ModeSelector({
                       <span className={`text-sm ${selected ? "font-semibold" : "font-medium"}`}>
                         {m.label}
                       </span>
-                      <span className="text-xs text-ink-3">· {m.tagline}</span>
                       {selected && (
                         <Check size={15} aria-hidden style={{ color: "var(--sky)" }} className="ml-auto" />
                       )}

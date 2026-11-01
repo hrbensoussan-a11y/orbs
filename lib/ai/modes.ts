@@ -16,11 +16,9 @@ export type AiModeId = "luna" | "terra";
 
 export type AiModeMeta = {
   id: AiModeId;
-  /** Nom affiché à l'élève. */
+  /** Libellé affiché à l'élève (par profondeur de réflexion). */
   label: string;
-  /** Résumé court (sous le nom). */
-  tagline: string;
-  /** Phrase explicative affichée dans le sélecteur. */
+  /** Phrase explicative courte affichée dans le sélecteur. */
   description: string;
 };
 
@@ -28,17 +26,13 @@ export type AiModeMeta = {
 export const AI_MODES: readonly AiModeMeta[] = [
   {
     id: "luna",
-    label: "Luna",
-    tagline: "Réflexion moyenne",
-    description:
-      "Pour vos tâches quotidiennes et vos questions courantes (devoirs, révisions, rédaction, organisation, explications simples).",
+    label: "Moyenne",
+    description: "Tâches quotidiennes et questions courantes.",
   },
   {
     id: "terra",
-    label: "Terra",
-    tagline: "Réflexion poussée",
-    description:
-      "Pour vos problèmes complexes qui demandent une analyse approfondie (raisonnement difficile, problèmes techniques, planification stratégique, décisions délicates).",
+    label: "Poussée",
+    description: "Problèmes complexes et analyse approfondie.",
   },
 ] as const;
 
