@@ -50,6 +50,128 @@ model User {
   cheersReceived  Cheer[]      @relation("CheerTo")
   challengesSet   Challenge[]  @relation("ChallengeFrom")
   challengesToDo  Challenge[]  @relation("ChallengeTo")
+
+  // Abonnement commercial + portefeuille de crédits IA
+  subscription Subscription?
+  wallet       CreditWallet?
+  ledger       CreditLedger[]
+}
+
+/// Abonnement commercial de l'utilisateur.
+///
+/// Un SEUL enregistrement par utilisateur (`userId @unique`) : il suit tout le
+/// cycle de vie de l'abonnement (création, renouvellement, changement d'offre,
+/// annulation, expiration) plutôt que d'empiler des lignes. L'historique fin
+/// des mouvements de crédits vit dans `CreditLedger`.
+///
+/// Pas d'enum natif (compat Postgres ⇄ SQLite) : les valeurs sont des chaînes
+/// validées côté code (voir lib/billing/plans.ts).
+///
+/// - `plan`   : "plus" | "ultimate" (l'offre « muse » est réservée à plus tard,
+///              volontairement absente). Repli implicite = pas d'abonnement = « free ».
+/// - `status` : cycle de vie Stripe reflété ici —
+///              "active"     : abonnement payant en cours ;
+///              "trialing"   : période d'essai (si un jour activée) ;
+///              "past_due"   : paiement de renouvellement échoué (accès en sursis) ;
+///              "canceled"   : résilié mais encore actif jusqu'à la fin de période ;
+///              "expired"    : terminé (plus d'accès payant) ;
+///              "incomplete" : paiement initial non finalisé.
+/// - Les identifiants Stripe ne sont JAMAIS des secrets (ni clé API ni jeton) :
+///   ce sont des références opaques côté Stripe.
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan   String // "plus" | "ultimate"
+  status String @default("incomplete") // active | trialing | past_due | canceled | expired | incomplete
+
+  // Références Stripe (opaques, non secrètes).
+  stripeCustomerId     String?
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+
+  // Cycle de facturation courant (copié depuis Stripe aux webhooks).
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+
+  // Résiliation : programmée à la fin de la période (l'accès reste jusque-là).
+  cancelAtPeriodEnd Boolean   @default(false)
+  canceledAt        DateTime?
+
+  // Changement d'offre programmé pour la fin de période (ex. rétrogradation
+  // Ultimate → Plus). Appliqué au renouvellement. null = aucun changement.
+  scheduledPlan String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+/// Portefeuille UNIQUE de crédits IA de l'utilisateur.
+///
+/// « Portefeuille unique » : un seul solde (`balance`) sert à TOUTES les
+/// consommations d'IA, quel que soit le moteur — Core (réflexion moyenne) ou
+/// Ultra (réflexion poussée) — ainsi que la voix et la génération de fiches.
+/// Les moteurs ne changent que le COÛT en crédits de chaque action (voir
+/// lib/billing/pricing.ts), jamais la source des crédits.
+///
+/// Modèle « allocation mensuelle » : à chaque cycle de facturation (ou, pour un
+/// compte gratuit, chaque mois glissant), le solde est ramené à l'allocation de
+/// l'offre. Les crédits non utilisés ne se cumulent pas d'un cycle à l'autre.
+model CreditWallet {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  balance   Int @default(0) // crédits dépensables maintenant (le portefeuille)
+  allowance Int @default(0) // allocation accordée pour le cycle courant (pour la jauge)
+
+  // Début du cycle courant de crédits. Pour un compte gratuit, sert au
+  // rafraîchissement « paresseux » mensuel (sans tâche planifiée).
+  cycleStart DateTime  @default(now())
+  cycleEnd   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledger CreditLedger[]
+}
+
+/// Journal append-only des mouvements de crédits (audit + affichage conso).
+///
+/// Chaque ligne = un mouvement : `delta` positif (octroi) ou négatif (dépense),
+/// avec le solde résultant (`balanceAfter`) pour reconstituer l'historique sans
+/// recalcul. `reason` catégorise le mouvement ; `engine` précise Core/Ultra pour
+/// une dépense de chat.
+model CreditLedger {
+  id       String       @id @default(cuid())
+  walletId String
+  wallet   CreditWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  userId   String // dénormalisé pour une lecture simple par utilisateur
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  delta        Int // + octroi, - dépense
+  balanceAfter Int
+  reason       String // grant_signup | grant_cycle | grant_upgrade | spend_chat | spend_cards | spend_voice_stt | spend_voice_tts | expire_cycle | adjust
+  engine       String? // "core" | "ultra" | null
+  meta         String? // JSON optionnel (modèle, tokens estimés, offre…)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([walletId, createdAt])
+}
+
+/// Idempotence des webhooks Stripe : on mémorise les `event.id` déjà traités
+/// pour ne jamais rejouer un événement (Stripe peut livrer plusieurs fois).
+model ProcessedWebhookEvent {
+  id        String   @id // identifiant d'événement Stripe (evt_…)
+  type      String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 /// Code à usage unique envoyé par e-mail (connexion sans mot de passe).

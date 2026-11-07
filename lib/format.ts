@@ -41,6 +41,21 @@ export function relativeDay(date: Date | string): string {
   return formatShortDate(d);
 }
 
+/** Montant en euros, format français (« 12,99 € »). */
+export function formatEur(amount: number): string {
+  return new Intl.NumberFormat(LOCALE, {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/** Entier avec séparateurs de milliers français (« 2 500 »). */
+export function formatInt(n: number): string {
+  return new Intl.NumberFormat(LOCALE).format(Math.round(n));
+}
+
 /** Clé locale AAAA-MM-JJ (utile pour regrouper par jour). */
 export function dayKey(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;

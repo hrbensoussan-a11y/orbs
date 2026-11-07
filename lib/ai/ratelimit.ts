@@ -21,7 +21,16 @@ export type RateResult =
   | { ok: true }
   | { ok: false; retryAfter: number; scope: "minute" | "day" };
 
-export function checkRateLimit(userId: string): RateResult {
+/**
+ * Limites par requête. Par défaut, les valeurs globales d'AI_CONFIG ; on peut
+ * passer des limites propres à l'offre de l'utilisateur (droits par abonnement,
+ * voir lib/billing/plans.ts) sans changer l'appelant pour autant.
+ */
+export type RateLimits = { perMin: number; perDay: number };
+
+export function checkRateLimit(userId: string, limits?: RateLimits): RateResult {
+  const perMin = limits?.perMin ?? AI_CONFIG.rateMaxPerMin;
+  const perDay = limits?.perDay ?? AI_CONFIG.rateMaxPerDay;
   const now = Date.now();
   let b = buckets.get(userId);
   if (!b) {
@@ -34,7 +43,7 @@ export function checkRateLimit(userId: string): RateResult {
     b.dayCount = 0;
     b.dayResetAt = now + 24 * 60 * 60 * 1000;
   }
-  if (b.dayCount >= AI_CONFIG.rateMaxPerDay) {
+  if (b.dayCount >= perDay) {
     return {
       ok: false,
       scope: "day",
@@ -45,7 +54,7 @@ export function checkRateLimit(userId: string): RateResult {
   // Fenêtre minute glissante.
   const cutoff = now - 60 * 1000;
   b.minute = b.minute.filter((t) => t > cutoff);
-  if (b.minute.length >= AI_CONFIG.rateMaxPerMin) {
+  if (b.minute.length >= perMin) {
     const oldest = b.minute[0];
     return {
       ok: false,

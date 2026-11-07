@@ -16,6 +16,9 @@ import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { streamChatCompletion, AiError } from "@/lib/ai/openai";
 import { AUDIO_MODE_ID, toModeId } from "@/lib/ai/modes";
 import type { ChatMessage } from "@/lib/ai/types";
+import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { engineForMode, chatOpForEngine, ENGINE_LABEL } from "@/lib/billing/pricing";
+import { insufficientCreditsResponse, engineLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (nécessaire pour Prisma via getCurrentUser + fetch sortant).
 export const runtime = "nodejs";
@@ -100,8 +103,18 @@ export async function POST(request: NextRequest) {
   const effectiveMode = voice ? AUDIO_MODE_ID : toModeId(mode);
   const { model, reasoningEffort } = resolveMode(effectiveMode);
 
-  // 4) Limitation du débit (par utilisateur).
-  const rate = checkRateLimit(user.id);
+  // Moteur de facturation (Core = Luna, Ultra = Terra) → portefeuille unique.
+  const engine = engineForMode(effectiveMode);
+  const op = chatOpForEngine(engine);
+
+  // 4) Abonnement + crédits : droits de l'offre, moteur autorisé, solde.
+  const billing = await getBillingState(user.id);
+
+  // 4a) Limitation du débit (selon l'offre de l'utilisateur).
+  const rate = checkRateLimit(user.id, {
+    perMin: billing.entitlements.rateMaxPerMin,
+    perDay: billing.entitlements.rateMaxPerDay,
+  });
   if (!rate.ok) {
     const msg =
       rate.scope === "minute"
@@ -111,6 +124,23 @@ export async function POST(request: NextRequest) {
       { error: "rate_limited", message: msg, retryAfter: rate.retryAfter },
       { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
     );
+  }
+
+  // 4b) Moteur Ultra réservé aux offres payantes (les réponses vocales, forcées
+  //     sur Core, ne sont jamais bloquées).
+  if (!billing.entitlements.engines.includes(engine)) {
+    return engineLockedResponse(ENGINE_LABEL[engine]);
+  }
+
+  // 4c) Réservation des crédits (débit atomique) AVANT l'appel. En cas d'échec
+  //     côté IA avant le flux, on rembourse (voir plus bas).
+  const spend = await spendCredits(user.id, op, {
+    engine,
+    hasPaidAccess: billing.hasPaidAccess,
+    meta: { model, mode: effectiveMode, voice: !!voice },
+  });
+  if (!spend.ok) {
+    return insufficientCreditsResponse(spend.needed, spend.balance);
   }
 
   // 5) Construction du contexte.
@@ -135,6 +165,7 @@ export async function POST(request: NextRequest) {
       model,
       reasoningEffort,
     });
+    // Le flux a bien démarré (HTTP 200) : le débit est conservé.
     return new Response(stream, {
       status: 200,
       headers: {
@@ -144,6 +175,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
+    // Échec AVANT le flux : on rembourse les crédits réservés (l'élève n'a rien reçu).
+    await refundCredits(user.id, spend.spent, { op, reason: "chat_failed" }).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json(
         { error: err.code, message: err.message },

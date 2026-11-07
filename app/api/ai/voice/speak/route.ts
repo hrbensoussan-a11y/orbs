@@ -12,6 +12,8 @@ import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { synthesizeSpeech } from "@/lib/ai/audio";
 import { AiError } from "@/lib/ai/openai";
 import { toVoiceId } from "@/lib/ai/voices";
+import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (Prisma via getCurrentUser + fetch sortant + flux).
 export const runtime = "nodejs";
@@ -52,8 +54,13 @@ export async function POST(request: NextRequest) {
   // Voix inconnue → voix par défaut (jamais d'erreur pour ça).
   const voice = toVoiceId(parsed.data.voice);
 
-  // 4) Limitation du débit (par utilisateur).
-  const rate = checkRateLimit(user.id);
+  // 4) Abonnement + crédits.
+  const billing = await getBillingState(user.id);
+
+  const rate = checkRateLimit(user.id, {
+    perMin: billing.entitlements.rateMaxPerMin,
+    perDay: billing.entitlements.rateMaxPerDay,
+  });
   if (!rate.ok) {
     const msg =
       rate.scope === "minute"
@@ -63,6 +70,18 @@ export async function POST(request: NextRequest) {
       { error: "rate_limited", message: msg, retryAfter: rate.retryAfter },
       { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
     );
+  }
+
+  if (!billing.entitlements.voice) {
+    return featureLockedResponse("L'assistant vocal est réservé à une offre supérieure.");
+  }
+
+  const spend = await spendCredits(user.id, "voice_tts", {
+    hasPaidAccess: billing.hasPaidAccess,
+    meta: { model: AI_CONFIG.ttsModel, voice },
+  });
+  if (!spend.ok) {
+    return insufficientCreditsResponse(spend.needed, spend.balance);
   }
 
   // 5) Synthèse → flux audio MP3.
@@ -77,6 +96,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
+    await refundCredits(user.id, spend.spent, { op: "voice_tts", reason: "tts_failed" }).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json({ error: err.code, message: err.message }, { status: err.status });
     }

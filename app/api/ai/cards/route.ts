@@ -9,6 +9,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { generateCards, generateCardsFromImage, AiError } from "@/lib/ai/openai";
+import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -79,7 +81,13 @@ export async function POST(request: NextRequest) {
   }
   const { text, image, kind, subject } = parsed.data;
 
-  const rate = checkRateLimit(user.id);
+  // Abonnement + crédits : droits de l'offre, débit selon le plan, solde.
+  const billing = await getBillingState(user.id);
+
+  const rate = checkRateLimit(user.id, {
+    perMin: billing.entitlements.rateMaxPerMin,
+    perDay: billing.entitlements.rateMaxPerDay,
+  });
   if (!rate.ok) {
     const msg =
       rate.scope === "minute"
@@ -91,6 +99,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Fonctionnalité « fiches par IA » réservée aux offres qui l'accordent.
+  if (!billing.entitlements.cards) {
+    return featureLockedResponse(
+      "La génération de fiches par IA est réservée à une offre supérieure.",
+    );
+  }
+
+  // Réservation des crédits avant la génération ; remboursement si échec.
+  const spend = await spendCredits(user.id, "cards", {
+    hasPaidAccess: billing.hasPaidAccess,
+    meta: { model: AI_CONFIG.model, kind, viaImage: !!image },
+  });
+  if (!spend.ok) {
+    return insufficientCreditsResponse(spend.needed, spend.balance);
+  }
+
   try {
     const sys = systemFor(kind, subject);
     const cards = image
@@ -98,6 +122,7 @@ export async function POST(request: NextRequest) {
       : await generateCards(sys, text as string);
     return NextResponse.json({ cards, model: AI_CONFIG.model });
   } catch (err) {
+    await refundCredits(user.id, spend.spent, { op: "cards", reason: "cards_failed" }).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json(
         { error: err.code, message: err.message },

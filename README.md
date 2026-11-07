@@ -147,6 +147,44 @@ permission micro (`NSMicrophoneUsageDescription` sur iOS, `RECORD_AUDIO` sur
 Android). Réutilise la **même** `OPENAI_API_KEY` (accès audio requis) ; sans
 clé, la voix se désactive proprement comme le reste de l'IA.
 
+## Abonnements & crédits IA (Plus / Ultimate)
+
+Deux offres payantes — **Orbs Plus** (12,99 €/mois) et **Orbs Ultimate**
+(21,99 €/mois) — alimentent un **portefeuille de crédits unique** qui finance
+tout l'usage de l'IA : les deux moteurs **Core** (réflexion moyenne, mode Luna)
+et **Ultra** (réflexion poussée, mode Terra), la voix et les fiches.
+
+- **Crédits non arbitraires** : chaque action a un coût **dérivé des coûts API
+  réels** (prix du modèle × consommation estimée ÷ valeur d'un crédit), le tout
+  **configurable** par variables d'environnement (`lib/billing/pricing.ts`).
+  Allocations par défaut : 300 (gratuit), 2 500 (Plus), 5 000 (Ultimate) crédits
+  par mois, calées sur une marge saine face au coût API.
+- **Cycle de vie complet** : abonnements actifs / en essai / impayés / résiliés /
+  expirés, **renouvellement automatique des crédits** au cycle de facturation,
+  **changement d'offre** (montée immédiate au prorata, retour au gratuit en fin
+  de période), résiliation et reprise.
+- **Paiement sécurisé par Stripe** : pages **hébergées** (Checkout + Billing
+  Portal) — aucune donnée de carte ne passe par Orbs — et **webhooks signés**
+  comme source de vérité. La clé secrète reste **côté serveur** ; **aucune clé
+  dans le navigateur** (Orbs n'utilise même pas Stripe.js). Architecture `fetch`
+  sans SDK, comme OpenAI/Brevo.
+- **Conçu pour de vrais paiements en production**, pas seulement une simulation.
+  Sans clé Stripe, l'app fonctionne : en **dev** les abonnements sont **simulés**
+  (parcours testable sans service externe) ; en **prod** la souscription échoue
+  proprement.
+- **Interface** : page `/abonnement` (comparaison des offres, jauge de crédits,
+  gestion : s'abonner, changer d'offre, résilier/reprendre, gérer le paiement),
+  accessible depuis *Mon compte*. Le chat propose un lien « voir les offres »
+  quand les crédits manquent ou que le moteur Ultra est verrouillé.
+
+> **Configuration externe & validation humaine** (compte Stripe, Produits/Prix,
+> webhook, activation du compte) : voir **[`docs/abonnements.md`](./docs/abonnements.md)**.
+
+Code : `lib/billing/` (pricing, plans, stripe, store, webhook), server actions
+`app/actions/billing.ts`, route `app/api/billing/webhook/route.ts`, UI
+`app/(app)/abonnement/` + `components/billing/`. L'intégration au portefeuille se
+fait dans les routes `app/api/ai/*` (débit atomique + remboursement si échec).
+
 ## L'espace famille (fonctionnel)
 
 - À l'inscription : **Élève** ou **Parent**. Un parent arrive sur `/parent`
@@ -227,7 +265,10 @@ vignette ; surfaces en verre dépoli ; vert `#38C172` en couleur primaire.
 
 `prisma/schema.prisma` — `User` (+ rôle, code famille, résumé Apprendre),
 `Settings`, `Entry` (contenu, humeur, tags, lieu, favori/épinglé, verrou,
-trackers…), `Tag`, `MediaAttachment`, `FamilyLink`, `Cheer`, `Challenge`.
+trackers…), `Tag`, `MediaAttachment`, `FamilyLink`, `Cheer`, `Challenge`,
+`Subscription` (abonnement + références Stripe), `CreditWallet` (portefeuille
+unique), `CreditLedger` (journal des crédits), `ProcessedWebhookEvent`
+(idempotence des webhooks).
 
 ## Sécurité — état et suite
 

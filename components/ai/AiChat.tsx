@@ -134,6 +134,8 @@ export function AiChat({
   const [pendingAction, setPendingAction] = useState<QuickAction | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `true` quand l'erreur est liée aux crédits / à l'offre (on propose un lien).
+  const [errorUpgrade, setErrorUpgrade] = useState(false);
   const [retry, setRetry] = useState<{ text: string; action: QuickAction | null } | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -427,6 +429,7 @@ export function AiChat({
     setPendingAction(null);
     setGhost(null);
     setError(null);
+    setErrorUpgrade(false);
     setRetry(null);
     setLoading(true);
 
@@ -478,7 +481,13 @@ export function AiChat({
         const data = await res.json().catch(() => null);
         removeEmptyPlaceholder();
         setError(data?.message ?? "L'IA est indisponible pour le moment. Réessaie dans un instant.");
-        setRetry({ text: clean, action });
+        // Erreur « crédits insuffisants » / « offre requise » → on propose un
+        // lien vers l'abonnement, et pas de bouton « Réessayer » (inutile).
+        if (data?.upgrade === true) {
+          setErrorUpgrade(true);
+        } else {
+          setRetry({ text: clean, action });
+        }
         return;
       }
       if (res.body) {
@@ -873,6 +882,11 @@ export function AiChat({
                             <button className="btn-ghost !py-1.5 !px-3 !text-sm mt-2 block" onClick={() => send(retry.text, retry.action)}>
                               Réessayer
                             </button>
+                          )}
+                          {errorUpgrade && (
+                            <a href="/abonnement" className="btn-primary !py-1.5 !px-3 !text-sm mt-2 inline-flex">
+                              Voir les offres & crédits
+                            </a>
                           )}
                         </div>
                       </div>

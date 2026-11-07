@@ -10,6 +10,8 @@ import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AiError } from "@/lib/ai/openai";
+import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (Prisma via getCurrentUser + fetch sortant + FormData).
 export const runtime = "nodejs";
@@ -46,8 +48,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3) Limitation du débit (par utilisateur).
-  const rate = checkRateLimit(user.id);
+  // 3) Abonnement + débit (selon l'offre de l'utilisateur).
+  const billing = await getBillingState(user.id);
+  const rate = checkRateLimit(user.id, {
+    perMin: billing.entitlements.rateMaxPerMin,
+    perDay: billing.entitlements.rateMaxPerDay,
+  });
   if (!rate.ok) {
     const msg =
       rate.scope === "minute"
@@ -57,6 +63,9 @@ export async function POST(request: NextRequest) {
       { error: "rate_limited", message: msg, retryAfter: rate.retryAfter },
       { status: 429, headers: { "Retry-After": String(rate.retryAfter) } },
     );
+  }
+  if (!billing.entitlements.voice) {
+    return featureLockedResponse("L'assistant vocal est réservé à une offre supérieure.");
   }
 
   // 4) Récupération et validation de l'audio.
@@ -87,10 +96,21 @@ export async function POST(request: NextRequest) {
   const match = AUDIO_EXT.find((a) => type.startsWith(a.prefix));
   const ext = match?.ext ?? "webm";
 
+  // Réservation des crédits avant la transcription ; remboursement si rien n'a
+  // été transcrit ou en cas d'échec (l'élève n'obtient alors aucun texte).
+  const spend = await spendCredits(user.id, "voice_stt", {
+    hasPaidAccess: billing.hasPaidAccess,
+    meta: { model: AI_CONFIG.sttModel },
+  });
+  if (!spend.ok) {
+    return insufficientCreditsResponse(spend.needed, spend.balance);
+  }
+
   // 5) Transcription.
   try {
     const text = await transcribeAudio(audio, `voix.${ext}`);
     if (!text) {
+      await refundCredits(user.id, spend.spent, { op: "voice_stt", reason: "stt_empty" }).catch(() => {});
       return NextResponse.json(
         { error: "empty", message: "Je n'ai rien entendu. Parle un peu plus près du micro." },
         { status: 422 },
@@ -98,6 +118,7 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ text });
   } catch (err) {
+    await refundCredits(user.id, spend.spent, { op: "voice_stt", reason: "stt_failed" }).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json({ error: err.code, message: err.message }, { status: err.status });
     }
