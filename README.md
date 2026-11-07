@@ -98,14 +98,20 @@ fonctionne normalement**. Le modèle utilisé est un modèle de raisonnement
 (Chat Completions, `max_completion_tokens` + `reasoning_effort`, sans
 `temperature`).
 
-#### Modes de réflexion — Luna & Terra
+#### Modes de réflexion — Core & Ultra
 
 Le chat propose deux modes, sélectionnables à tout moment **dans une même
 conversation** (sélecteur sous le champ de saisie) :
 
-- **Luna** — réflexion _moyenne_ : tâches quotidiennes et questions courantes.
-  Mode **par défaut**, et celui utilisé par l'**assistant vocal**.
-- **Terra** — réflexion _poussée_ : problèmes complexes, analyse approfondie.
+- **Core** — réflexion _moyenne_ : tâches quotidiennes et questions courantes.
+  Mode **par défaut**, et celui utilisé par l'**assistant vocal**. Modèle
+  technique : **Luna** (id interne `luna`).
+- **Ultra** — réflexion _poussée_ : problèmes complexes, analyse approfondie.
+  Modèle technique : **Terra** (id interne `terra`).
+
+> **Core** et **Ultra** sont les **libellés visibles** ; les identifiants de mode
+> (`luna` / `terra`) et les modèles API restent inchangés. Les deux moteurs
+> partagent le **même portefeuille de crédits** (voir « Abonnements & crédits »).
 
 Changer de mode **ne crée pas de nouvelle discussion** et **n'efface rien** :
 même identifiant, même historique, appliqué à la réponse suivante. Seuls le
@@ -115,10 +121,10 @@ configuration des modes est **centralisée** dans `lib/ai/config.ts`
 (`resolveMode`) et pilotée par variables d'environnement (voir `.env.example`) :
 
 ```bash
-OPENAI_MODEL_LUNA="gpt-5.6-luna"        # modèle du mode Luna (moyen)
-OPENAI_MODEL_TERRA="gpt-5.6-terra"      # modèle du mode Terra (repli: OPENAI_MODEL)
-OPENAI_REASONING_EFFORT_LUNA="medium"   # effort de Luna
-OPENAI_REASONING_EFFORT_TERRA="high"    # effort de Terra
+OPENAI_MODEL_LUNA="gpt-5.6-luna"        # modèle du mode Core (moyen, id luna)
+OPENAI_MODEL_TERRA="gpt-5.6-terra"      # modèle du mode Ultra (poussé, id terra ; repli: OPENAI_MODEL)
+OPENAI_REASONING_EFFORT_LUNA="medium"   # effort de Core
+OPENAI_REASONING_EFFORT_TERRA="high"    # effort de Ultra
 ```
 
 ### Assistant vocal (l'élève parle, l'IA répond à voix haute)
@@ -128,9 +134,10 @@ la réponse. Bilingue **FR/EN** (langue détectée automatiquement). Trois voix 
 choix (Nova / Alloy / Shimmer) et une option « lire les réponses
 automatiquement », mémorisées en `localStorage`.
 
-Les réponses vocales utilisent **toujours Luna** (réflexion moyenne, formulée
-pour la lecture à voix haute), même si **Terra** est sélectionné dans le chat
-texte — la règle est appliquée côté serveur (`app/api/ai/chat/route.ts`).
+Les réponses vocales utilisent **toujours Core** (Luna, réflexion moyenne,
+formulée pour la lecture à voix haute), même si **Ultra** est sélectionné dans le
+chat texte — la règle est appliquée côté serveur (`app/api/ai/chat/route.ts`).
+Le **modèle audio spécialisé** (STT/TTS) reste inchangé.
 
 Même principe de sécurité que le chat : tout passe par **notre backend**, la
 clé reste côté serveur. Deux routes :

@@ -14,16 +14,19 @@ export function CreditMeter({
   costs,
   ultraUnlocked,
   cycleEnd,
+  usage,
 }: {
   balance: number;
   allowance: number;
   costs: Record<CreditOp, number>;
   ultraUnlocked: boolean;
   cycleEnd: Date | null;
+  usage: { core: number; ultra: number; other: number; total: number };
 }) {
   const pct = allowance > 0 ? Math.max(0, Math.min(100, (balance / allowance) * 100)) : 0;
   const coreMsgs = Math.floor(balance / costs.chat_core);
   const ultraMsgs = Math.floor(balance / costs.chat_ultra);
+  const upct = (n: number) => (allowance > 0 ? Math.min(100, (n / allowance) * 100) : 0);
 
   return (
     <section className="card p-5">
@@ -87,6 +90,48 @@ export function CreditMeter({
               <span className="text-ink-3">Réservé aux offres payantes</span>
             )}
           </p>
+        </div>
+      </div>
+
+      {/* Consommation du cycle, répartie entre Core et Ultra (portefeuille unique) */}
+      <div className="mt-4 pt-4 border-t border-line">
+        <div className="flex items-center justify-between text-xs text-ink-2 mb-1.5">
+          <span>Consommation ce cycle</span>
+          <span>
+            {formatInt(usage.total)} crédit{usage.total > 1 ? "s" : ""} utilisé
+            {usage.total > 1 ? "s" : ""}
+          </span>
+        </div>
+        <div
+          className="flex overflow-hidden"
+          style={{ height: 8, borderRadius: "var(--r-pill)", background: "var(--fill-2)" }}
+          aria-hidden
+        >
+          {usage.core > 0 && (
+            <div style={{ width: `${upct(usage.core)}%`, background: "var(--sky)" }} />
+          )}
+          {usage.ultra > 0 && (
+            <div style={{ width: `${upct(usage.ultra)}%`, background: "var(--lilac)" }} />
+          )}
+          {usage.other > 0 && (
+            <div style={{ width: `${upct(usage.other)}%`, background: "var(--ink-3)" }} />
+          )}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+          <span className="inline-flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--sky)" }} aria-hidden />
+            Core · {formatInt(usage.core)}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lilac)" }} aria-hidden />
+            Ultra · {formatInt(usage.ultra)}
+          </span>
+          {usage.other > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--ink-3)" }} aria-hidden />
+              Voix & autres · {formatInt(usage.other)}
+            </span>
+          )}
         </div>
       </div>
     </section>

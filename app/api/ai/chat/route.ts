@@ -16,8 +16,15 @@ import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { streamChatCompletion, AiError } from "@/lib/ai/openai";
 import { AUDIO_MODE_ID, toModeId } from "@/lib/ai/modes";
 import type { ChatMessage } from "@/lib/ai/types";
-import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
-import { engineForMode, chatOpForEngine, ENGINE_LABEL } from "@/lib/billing/pricing";
+import { getBillingState, reserve, settle, release } from "@/lib/billing/store";
+import {
+  engineForMode,
+  chatOpForEngine,
+  ENGINE_LABEL,
+  creditsForTokens,
+  estimateInputTokens,
+  estimateOutputTokens,
+} from "@/lib/billing/pricing";
 import { insufficientCreditsResponse, engineLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (nécessaire pour Prisma via getCurrentUser + fetch sortant).
@@ -132,18 +139,7 @@ export async function POST(request: NextRequest) {
     return engineLockedResponse(ENGINE_LABEL[engine]);
   }
 
-  // 4c) Réservation des crédits (débit atomique) AVANT l'appel. En cas d'échec
-  //     côté IA avant le flux, on rembourse (voir plus bas).
-  const spend = await spendCredits(user.id, op, {
-    engine,
-    hasPaidAccess: billing.hasPaidAccess,
-    meta: { model, mode: effectiveMode, voice: !!voice },
-  });
-  if (!spend.ok) {
-    return insufficientCreditsResponse(spend.needed, spend.balance);
-  }
-
-  // 5) Construction du contexte.
+  // 5) Construction du contexte (nécessaire pour estimer la taille d'entrée).
   const system = buildSystemPrompt(
     { firstName: user.firstName || user.name, schoolClass: user.schoolClass },
     action,
@@ -157,15 +153,41 @@ export async function POST(request: NextRequest) {
   const userContent = contextBlock ? `${contextBlock}\n\n---\n\n${message}` : message;
   messages.push({ role: "user", content: userContent });
 
+  // 4c) RÉSERVE une estimation de crédits (couvre le pire cas : entrée estimée +
+  //     sortie maximale). Le coût RÉEL sera réglé à la fin du flux (onSettle).
+  const inputChars = system.length + messages.reduce((a, m) => a + m.content.length, 0);
+  const estimated = creditsForTokens(
+    engine,
+    estimateInputTokens(inputChars),
+    AI_CONFIG.maxCompletionTokens,
+  );
+  const reservation = await reserve(user.id, op, {
+    estimated,
+    engine,
+    hasPaidAccess: billing.hasPaidAccess,
+    meta: { model, mode: effectiveMode, voice: !!voice },
+  });
+  if (!reservation.ok) {
+    return insufficientCreditsResponse(reservation.needed, reservation.balance);
+  }
+
   // 6) Appel OpenAI en streaming. Les erreurs AVANT le flux (auth upstream,
-  //    réseau, timeout) reviennent en JSON avec le bon code HTTP ; une fois le
-  //    flux commencé (200), le texte arrive au fur et à mesure.
+  //    réseau, timeout) reviennent en JSON ; une fois le flux commencé (200), le
+  //    texte arrive au fur et à mesure et les crédits sont réglés à la clôture.
   try {
     const stream = await streamChatCompletion(system, messages, {
       model,
       reasoningEffort,
+      // Réconciliation : on règle au coût réel (usage fournisseur si dispo,
+      // sinon estimation d'après le texte produit) et on rend le reste réservé.
+      onSettle: async ({ usage, outputChars }) => {
+        const inTok = usage?.prompt_tokens ?? estimateInputTokens(inputChars);
+        const outTok = usage?.completion_tokens ?? estimateOutputTokens(outputChars);
+        const actual = creditsForTokens(engine, inTok, outTok);
+        await settle(reservation.reservationId, actual);
+      },
     });
-    // Le flux a bien démarré (HTTP 200) : le débit est conservé.
+    // Le flux a bien démarré (HTTP 200) : la réservation sera réglée à la clôture.
     return new Response(stream, {
       status: 200,
       headers: {
@@ -175,8 +197,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
-    // Échec AVANT le flux : on rembourse les crédits réservés (l'élève n'a rien reçu).
-    await refundCredits(user.id, spend.spent, { op, reason: "chat_failed" }).catch(() => {});
+    // Échec AVANT le flux : on LIBÈRE la réservation (l'élève n'a rien reçu).
+    await release(reservation.reservationId).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json(
         { error: err.code, message: err.message },

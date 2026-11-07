@@ -10,7 +10,8 @@ import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AiError } from "@/lib/ai/openai";
-import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { getBillingState, reserve, settle, release } from "@/lib/billing/store";
+import { creditCost } from "@/lib/billing/pricing";
 import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (Prisma via getCurrentUser + fetch sortant + FormData).
@@ -96,29 +97,33 @@ export async function POST(request: NextRequest) {
   const match = AUDIO_EXT.find((a) => type.startsWith(a.prefix));
   const ext = match?.ext ?? "webm";
 
-  // Réservation des crédits avant la transcription ; remboursement si rien n'a
-  // été transcrit ou en cas d'échec (l'élève n'obtient alors aucun texte).
-  const spend = await spendCredits(user.id, "voice_stt", {
+  // Réservation (coût forfaitaire : la voix n'expose pas de tokens). On règle au
+  // succès, on LIBÈRE si rien n'a été transcrit ou en cas d'échec (aucun texte
+  // rendu à l'élève).
+  const sttCost = creditCost("voice_stt");
+  const reservation = await reserve(user.id, "voice_stt", {
+    estimated: sttCost,
     hasPaidAccess: billing.hasPaidAccess,
     meta: { model: AI_CONFIG.sttModel },
   });
-  if (!spend.ok) {
-    return insufficientCreditsResponse(spend.needed, spend.balance);
+  if (!reservation.ok) {
+    return insufficientCreditsResponse(reservation.needed, reservation.balance);
   }
 
   // 5) Transcription.
   try {
     const text = await transcribeAudio(audio, `voix.${ext}`);
     if (!text) {
-      await refundCredits(user.id, spend.spent, { op: "voice_stt", reason: "stt_empty" }).catch(() => {});
+      await release(reservation.reservationId).catch(() => {});
       return NextResponse.json(
         { error: "empty", message: "Je n'ai rien entendu. Parle un peu plus près du micro." },
         { status: 422 },
       );
     }
+    await settle(reservation.reservationId, sttCost); // coût forfaitaire confirmé
     return NextResponse.json({ text });
   } catch (err) {
-    await refundCredits(user.id, spend.spent, { op: "voice_stt", reason: "stt_failed" }).catch(() => {});
+    await release(reservation.reservationId).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json({ error: err.code, message: err.message }, { status: err.status });
     }

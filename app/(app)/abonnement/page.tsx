@@ -114,6 +114,7 @@ export default async function AbonnementPage({
         costs={billing.costs}
         ultraUnlocked={ultraUnlocked}
         cycleEnd={billing.wallet.cycleEnd}
+        usage={billing.usage}
       />
 
       {/* Gestion + comparaison des offres (interactif) */}

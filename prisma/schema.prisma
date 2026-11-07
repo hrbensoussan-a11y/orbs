@@ -55,6 +55,7 @@ model User {
   subscription Subscription?
   wallet       CreditWallet?
   ledger       CreditLedger[]
+  reservations CreditReservation[]
 }
 
 /// Abonnement commercial de l'utilisateur.
@@ -162,6 +163,32 @@ model CreditLedger {
 
   @@index([userId, createdAt])
   @@index([walletId, createdAt])
+}
+
+/// Réservation de crédits (crédits « en attente » pendant un appel IA).
+///
+/// Modèle réserver → réconcilier : avant d'appeler le modèle, on RETIENT une
+/// estimation de crédits (le solde du portefeuille est décrémenté d'autant).
+/// Une fois la consommation RÉELLE connue (tokens renvoyés par le fournisseur),
+/// on débite le coût réel et on REND la différence (voir lib/billing/store.ts →
+/// reserve / settle / release). La ligne n'existe QUE tant que la réservation
+/// est ouverte : elle est supprimée à la réconciliation (le CreditLedger garde
+/// la trace définitive de la consommation). Une réservation orpheline (crash /
+/// interruption) est libérée par balayage après expiration (`createdAt`).
+model CreditReservation {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  op        String // chat_core | chat_ultra | cards | voice_stt | voice_tts
+  engine    String? // core | ultra | null
+  estimated Int // crédits retenus sur le solde
+  meta      String? // JSON optionnel (modèle, estimation…)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 /// Idempotence des webhooks Stripe : on mémorise les `event.id` déjà traités

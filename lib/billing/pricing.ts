@@ -143,6 +143,43 @@ export function creditCost(op: CreditOp): number {
   return Math.max(1, Math.ceil(opCostEur(op) / CREDIT_VALUE_EUR));
 }
 
+// ---------------------------------------------------------------------------
+// Conversion CENTRALISÉE coût API ⇄ crédits à partir de la consommation RÉELLE.
+//
+// C'est l'unique endroit où l'on transforme des tokens en crédits : les routes
+// et composants ne recalculent jamais de coût eux-mêmes. Utilisé par le modèle
+// « réserver → réconcilier » (lib/billing/store.ts) : on réserve une estimation
+// puis on règle au coût réel une fois les tokens connus.
+// ---------------------------------------------------------------------------
+
+/** Coût en crédits d'une consommation réelle (tokens d'entrée / sortie). */
+export function creditsForTokens(
+  engine: CreditEngine,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const p = MODEL_PRICE_EUR_PER_MTOK[engine];
+  const eur =
+    (Math.max(0, inputTokens) * p.input) / 1e6 +
+    (Math.max(0, outputTokens) * p.output) / 1e6;
+  return Math.max(1, Math.ceil(eur / CREDIT_VALUE_EUR));
+}
+
+/**
+ * Estimation (généreuse) du nombre de tokens d'entrée à partir d'un nombre de
+ * caractères. On vise large (≈ 1 token pour 3 caractères) pour que la
+ * RÉSERVATION couvre la consommation réelle (évite tout solde négatif au
+ * règlement) ; la différence est rendue à la réconciliation.
+ */
+export function estimateInputTokens(chars: number): number {
+  return Math.max(1, Math.ceil(Math.max(0, chars) / 3));
+}
+
+/** Estimation de tokens de sortie à partir d'un texte déjà produit (secours). */
+export function estimateOutputTokens(chars: number): number {
+  return Math.max(0, Math.ceil(Math.max(0, chars) / 4));
+}
+
 /** Tableau figé des coûts (pratique pour l'affichage et les props). */
 export function creditCosts(): Record<CreditOp, number> {
   return {

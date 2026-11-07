@@ -12,11 +12,11 @@
 // extérieur et à Échap. Compact et responsive (desktop + mobile).
 
 import { useEffect, useRef, useState } from "react";
-import { Moon, Globe, Check, ChevronDown } from "lucide-react";
+import { Sparkles, Zap, Check, ChevronDown } from "lucide-react";
 import { AI_MODES, MODE_BY_ID, type AiModeId } from "@/lib/ai/modes";
 
-/** Icône associée à chaque mode (Luna = lune, Terra = globe). */
-const MODE_ICON: Record<AiModeId, typeof Moon> = { luna: Moon, terra: Globe };
+/** Icône associée à chaque mode (Core = étincelle, Ultra = éclair). */
+const MODE_ICON: Record<AiModeId, typeof Sparkles> = { luna: Sparkles, terra: Zap };
 
 export function ModeSelector({
   mode,

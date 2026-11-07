@@ -7,10 +7,15 @@
 // renvoyés au client.
 //
 // Deux modes, une seule conversation :
-//   - Luna  : réflexion moyenne — tâches quotidiennes, questions courantes.
-//   - Terra : réflexion poussée — problèmes complexes, analyse approfondie.
-// Le mode change la PROFONDEUR du raisonnement, pas la personnalité : la voix,
-// la langue, le ton et les préférences restent communs (voir lib/ai/persona.ts).
+//   - Core  (id interne « luna »)  : réflexion moyenne — tâches quotidiennes,
+//     questions courantes. Modèle technique inchangé (Luna).
+//   - Ultra (id interne « terra ») : réflexion poussée — problèmes complexes,
+//     analyse approfondie. Modèle technique inchangé (Terra).
+// Seuls les LIBELLÉS visibles sont « Core » / « Ultra » ; les identifiants de
+// mode (« luna » / « terra ») et les modèles API restent inchangés (compat +
+// aucune migration de données). Le mode change la PROFONDEUR du raisonnement,
+// pas la personnalité : la voix, la langue, le ton et les préférences restent
+// communs (voir lib/ai/persona.ts).
 
 export type AiModeId = "luna" | "terra";
 
@@ -26,22 +31,23 @@ export type AiModeMeta = {
 export const AI_MODES: readonly AiModeMeta[] = [
   {
     id: "luna",
-    label: "Moyenne",
+    label: "Core",
     description: "Devoirs, tâches quotidiennes et questions courantes.",
   },
   {
     id: "terra",
-    label: "Poussée",
+    label: "Ultra",
     description: "Problèmes complexes, projets et analyse approfondie.",
   },
 ] as const;
 
-/** Mode par défaut d'une nouvelle discussion (le mode « quotidien »). */
+/** Mode par défaut d'une nouvelle discussion (Core, le mode « quotidien »). */
 export const DEFAULT_MODE_ID: AiModeId = "luna";
 
 /**
  * Mode imposé aux interactions VOCALES (l'élève parle / écoute la réponse),
  * quel que soit le mode choisi dans le chat texte. Voir route /api/ai/chat.
+ * Reste « Core » (Luna) ; le modèle audio spécialisé, lui, est inchangé.
  */
 export const AUDIO_MODE_ID: AiModeId = "luna";
 

@@ -36,6 +36,10 @@ Page /abonnement <────────────── /api/billing/webhoo
 
 ## 2. Le portefeuille de crédits (unique)
 
+**Core** et **Ultra** sont les **libellés visibles** des deux modes de chat
+(anciennement « Moyenne » / « Poussée » ; modèles techniques Luna / Terra,
+inchangés). Les deux partagent le **même** portefeuille.
+
 Un **seul** solde de crédits (`CreditWallet.balance`) finance **toutes** les
 consommations d'IA :
 
@@ -65,6 +69,30 @@ d'un crédit. **Tout est configurable** par variables d'environnement (voir
 crédits sont dépensés : la marge réelle est bien supérieure, peu d'utilisateurs
 épuisant leur allocation.* Les allocations sont réglables via
 `CREDITS_MONTHLY_FREE` / `_PLUS` / `_ULTIMATE`.
+
+### Facturation « réserver → réconcilier » (par requête)
+
+Les crédits sont une **unité interne** à Orbs, pas les tokens du fournisseur.
+Chaque requête IA suit ce cycle (service central `lib/billing/store.ts`) :
+
+1. vérifier le solde côté serveur ;
+2. **réserver** une estimation (retenue atomique sur le solde — pire cas :
+   entrée estimée + sortie maximale) ;
+3. appeler le modèle choisi ;
+4. récupérer la **consommation réelle** (tokens renvoyés par le fournisseur ;
+   pour le chat en flux, via l'`usage` de fin de flux, avec repli sur la
+   longueur réellement produite) ;
+5. convertir en crédits selon le modèle (`lib/billing/pricing.ts`, centralisé) ;
+6. **débiter** le coût réel ;
+7. **libérer** les crédits réservés mais non consommés ;
+8. **refuser** la requête si le solde est insuffisant.
+
+Garanties : écritures de solde **atomiques** (jamais de solde négatif ni de
+double débit), **remboursement** si l'appel échoue, et **libération automatique**
+des réservations orphelines (crash / interruption) après expiration
+(`CREDITS_RESERVATION_TTL_MS`, 5 min). La voix (STT/TTS) n'expose pas de tokens :
+coût **forfaitaire** (réserve = règlement). Couvert par `tests/credits.test.ts`
+(`npm test`).
 
 ### Renouvellement des crédits
 

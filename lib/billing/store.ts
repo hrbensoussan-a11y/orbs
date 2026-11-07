@@ -120,77 +120,170 @@ async function ensureFreeCycleFresh(
 }
 
 // ---------------------------------------------------------------------------
-// Dépense / remboursement de crédits (le cœur de l'intégration IA ⇄ crédits)
+// Service de crédits « réserver → réconcilier » (cœur de l'intégration IA)
+//
+// Chaque requête IA suit ce cycle (cahier des charges) :
+//   1) vérifier le solde ; 2) RÉSERVER une estimation (retenue atomique) ;
+//   3) appeler le modèle ; 4) récupérer la consommation réelle ; 5) calculer le
+//   coût réel ; 6) débiter ; 7) LIBÉRER le reste réservé ; 8) refuser si solde
+//   insuffisant. Core et Ultra partagent le MÊME portefeuille, seuls les coûts
+//   diffèrent (voir lib/billing/pricing.ts).
+//
+// Toutes les écritures de solde sont des opérations SQL atomiques à une seule
+// instruction (décrément gardé, incréments, suppression-réclamation) : pas de
+// solde négatif, pas de double débit, sûres sous requêtes simultanées. Les
+// réservations orphelines (crash / interruption) sont libérées par balayage.
 // ---------------------------------------------------------------------------
-export type SpendResult =
-  | { ok: true; spent: number; balance: number }
+
+/** Durée de vie d'une réservation avant libération automatique (ms). */
+function reservationTtlMs(): number {
+  const raw = process.env.CREDITS_RESERVATION_TTL_MS;
+  const n = raw == null || raw === "" ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 5 * 60 * 1000; // 5 min par défaut
+}
+
+export type ReserveResult =
+  | { ok: true; reservationId: string; estimated: number; balance: number }
   | { ok: false; reason: "insufficient"; needed: number; balance: number };
 
 /**
- * Débite le portefeuille pour une action d'IA, de façon atomique (le solde ne
- * peut jamais devenir négatif). Rafraîchit d'abord le cycle gratuit pour que
- * l'allocation mensuelle soit à jour.
+ * Étape 2 — RÉSERVE `estimated` crédits (retenue sur le solde). Rafraîchit
+ * d'abord le cycle gratuit et libère les réservations orphelines. Refuse
+ * (étape 8) si le solde disponible est insuffisant, sans rien retenir.
  */
-export async function spendCredits(
+export async function reserve(
   userId: string,
   op: CreditOp,
-  info?: { engine?: CreditEngine; meta?: Record<string, unknown>; hasPaidAccess?: boolean },
-): Promise<SpendResult> {
-  await ensureFreeCycleFresh(userId, info?.hasPaidAccess ?? false);
-  const cost = creditCost(op);
+  info: {
+    estimated: number;
+    engine?: CreditEngine | null;
+    meta?: Record<string, unknown>;
+    hasPaidAccess?: boolean;
+  },
+): Promise<ReserveResult> {
+  const estimated = Math.max(1, Math.ceil(info.estimated));
+  await releaseStaleReservations(userId);
+  await ensureFreeCycleFresh(userId, info.hasPaidAccess ?? false);
 
-  return prisma.$transaction(async (tx) => {
-    const wallet = await tx.creditWallet.findUnique({ where: { userId } });
-    if (!wallet || wallet.balance < cost) {
-      return {
-        ok: false as const,
-        reason: "insufficient" as const,
-        needed: cost,
-        balance: wallet?.balance ?? 0,
-      };
-    }
-    const updated = await tx.creditWallet.update({
-      where: { userId },
-      data: { balance: { decrement: cost } },
-    });
-    await tx.creditLedger.create({
-      data: {
-        walletId: wallet.id,
-        userId,
-        delta: -cost,
-        balanceAfter: updated.balance,
-        reason: spendReason(op),
-        engine: info?.engine ?? null,
-        meta: info?.meta ? JSON.stringify(info.meta) : null,
-      },
-    });
-    return { ok: true as const, spent: cost, balance: updated.balance };
+  // Décrément atomique GARDÉ : ne retient que si le solde couvre l'estimation.
+  const res = await prisma.creditWallet.updateMany({
+    where: { userId, balance: { gte: estimated } },
+    data: { balance: { decrement: estimated } },
   });
+  if (res.count === 0) {
+    const w = await prisma.creditWallet.findUnique({ where: { userId } });
+    return { ok: false, reason: "insufficient", needed: estimated, balance: w?.balance ?? 0 };
+  }
+
+  const resv = await prisma.creditReservation.create({
+    data: {
+      userId,
+      op,
+      engine: info.engine ?? null,
+      estimated,
+      meta: info.meta ? JSON.stringify(info.meta) : null,
+    },
+  });
+  const w = await prisma.creditWallet.findUnique({ where: { userId } });
+  return { ok: true, reservationId: resv.id, estimated, balance: w?.balance ?? 0 };
 }
 
-/** Rembourse des crédits (ex. échec d'un appel IA après réservation). */
-export async function refundCredits(
-  userId: string,
-  amount: number,
-  meta?: Record<string, unknown>,
-): Promise<void> {
-  if (amount <= 0) return;
-  const wallet = await prisma.creditWallet.findUnique({ where: { userId } });
-  if (!wallet) return;
+/**
+ * Étapes 5-7 — RÉCONCILIE une réservation au coût réel (`actualCost`, en
+ * crédits) : débite ce coût et REND la différence réservée. Le coût est borné à
+ * l'estimation (jamais de solde négatif). Idempotent : la suppression de la
+ * réservation sert de verrou (un seul règlement gagne).
+ */
+export async function settle(
+  reservationId: string,
+  actualCost: number,
+): Promise<{ settled: boolean; charged: number }> {
+  const resv = await prisma.creditReservation.findUnique({ where: { id: reservationId } });
+  if (!resv) return { settled: false, charged: 0 };
+  const charged = Math.min(Math.max(0, Math.ceil(actualCost)), resv.estimated);
+
+  // Réclamation atomique : la suppression empêche tout double règlement.
+  const claim = await prisma.creditReservation.deleteMany({ where: { id: reservationId } });
+  if (claim.count === 0) return { settled: false, charged: 0 };
+
+  const refund = resv.estimated - charged; // ≥ 0
   const updated = await prisma.creditWallet.update({
-    where: { userId },
-    data: { balance: { increment: amount } },
+    where: { userId: resv.userId },
+    data: { balance: { increment: refund } },
   });
   await prisma.creditLedger.create({
     data: {
-      walletId: wallet.id,
-      userId,
-      delta: amount,
+      walletId: updated.id,
+      userId: resv.userId,
+      delta: -charged,
       balanceAfter: updated.balance,
-      reason: "refund",
-      meta: meta ? JSON.stringify(meta) : null,
+      reason: spendReason(resv.op as CreditOp),
+      engine: resv.engine,
+      meta: resv.meta,
     },
   });
+  return { settled: true, charged };
+}
+
+/**
+ * Libère INTÉGRALEMENT une réservation (échec de l'appel, interruption avant
+ * toute consommation) : rend les crédits retenus, sans écrire au journal.
+ */
+export async function release(reservationId: string): Promise<void> {
+  const resv = await prisma.creditReservation.findUnique({ where: { id: reservationId } });
+  if (!resv) return;
+  const claim = await prisma.creditReservation.deleteMany({ where: { id: reservationId } });
+  if (claim.count === 0) return;
+  await prisma.creditWallet
+    .update({ where: { userId: resv.userId }, data: { balance: { increment: resv.estimated } } })
+    .catch(() => {});
+}
+
+/**
+ * Libère les réservations orphelines (plus vieilles que le TTL) : couvre les
+ * crashs / interruptions où `settle`/`release` n'a jamais été appelé. Renvoie le
+ * nombre de réservations libérées.
+ */
+export async function releaseStaleReservations(
+  userId?: string,
+  olderThanMs = reservationTtlMs(),
+): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const stale = await prisma.creditReservation.findMany({
+    where: { createdAt: { lt: cutoff }, ...(userId ? { userId } : {}) },
+  });
+  let n = 0;
+  for (const r of stale) {
+    const claim = await prisma.creditReservation.deleteMany({ where: { id: r.id } });
+    if (claim.count === 0) continue;
+    await prisma.creditWallet
+      .update({ where: { userId: r.userId }, data: { balance: { increment: r.estimated } } })
+      .catch(() => {});
+    n++;
+  }
+  return n;
+}
+
+/** Consommation (crédits dépensés) par moteur depuis `since` — pour l'UI. */
+export async function creditUsageByEngine(
+  userId: string,
+  since: Date,
+): Promise<{ core: number; ultra: number; other: number; total: number }> {
+  const rows = await prisma.creditLedger.groupBy({
+    by: ["engine"],
+    where: { userId, createdAt: { gte: since }, reason: { startsWith: "spend_" } },
+    _sum: { delta: true },
+  });
+  let core = 0;
+  let ultra = 0;
+  let other = 0;
+  for (const r of rows) {
+    const spent = -(r._sum.delta ?? 0); // delta négatif → dépense positive
+    if (r.engine === "core") core += spent;
+    else if (r.engine === "ultra") ultra += spent;
+    else other += spent;
+  }
+  return { core, ultra, other, total: core + ultra + other };
 }
 
 function spendReason(op: CreditOp): string {
@@ -457,6 +550,8 @@ export type BillingState = {
   hasPaidAccess: boolean;
   wallet: { balance: number; allowance: number; cycleStart: Date; cycleEnd: Date | null };
   costs: Record<CreditOp, number>;
+  /** Consommation du cycle courant, répartie par moteur (Core / Ultra / autres). */
+  usage: { core: number; ultra: number; other: number; total: number };
   subscription: Subscription | null;
   /** Détail de l'abonnement payant (même si l'accès est encore actif après résiliation). */
   cancelAtPeriodEnd: boolean;
@@ -464,9 +559,13 @@ export type BillingState = {
 
 /**
  * État de facturation complet d'un utilisateur. Rafraîchit au passage le cycle
- * gratuit (lazy). À appeler une fois par requête concernée.
+ * gratuit (lazy) et libère les réservations orphelines. À appeler une fois par
+ * requête concernée.
  */
 export async function getBillingState(userId: string): Promise<BillingState> {
+  // Libère d'éventuelles réservations orphelines avant de lire le solde.
+  await releaseStaleReservations(userId);
+
   const sub = await prisma.subscription.findUnique({ where: { userId } });
   const hasPaidAccess = sub
     ? statusHasAccess(sub.status, sub.currentPeriodEnd)
@@ -474,6 +573,7 @@ export async function getBillingState(userId: string): Promise<BillingState> {
   const effectivePlan: PlanId = hasPaidAccess ? toPlanId(sub!.plan) : "free";
 
   const wallet = await ensureFreeCycleFresh(userId, hasPaidAccess);
+  const usage = await creditUsageByEngine(userId, wallet.cycleStart);
 
   return {
     plan: effectivePlan,
@@ -487,6 +587,7 @@ export async function getBillingState(userId: string): Promise<BillingState> {
       cycleEnd: wallet.cycleEnd,
     },
     costs: creditCosts(),
+    usage,
     subscription: sub,
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
   };

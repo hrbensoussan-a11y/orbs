@@ -36,10 +36,23 @@ type OpenAiMessage = { role: "system" | "user" | "assistant"; content: string };
  * `opts.model` / `opts.reasoningEffort` sélectionnent le mode (Luna / Terra) ;
  * sans eux, on retombe sur la configuration par défaut (AI_CONFIG).
  */
+/** Consommation réelle d'un appel de chat, remontée à la fin du flux. */
+export type ChatUsage = { prompt_tokens?: number; completion_tokens?: number };
+
 export async function streamChatCompletion(
   system: string,
   messages: ChatMessage[],
-  opts?: { model?: string; reasoningEffort?: string },
+  opts?: {
+    model?: string;
+    reasoningEffort?: string;
+    /**
+     * Appelé UNE fois à la fin du flux (clôture, annulation ou erreur), avec la
+     * consommation réelle si le fournisseur l'a communiquée (`usage`), sinon
+     * `null`, plus le nombre de caractères réellement produits (`outputChars`)
+     * pour une estimation de secours. Sert à régler les crédits réservés.
+     */
+    onSettle?: (info: { usage: ChatUsage | null; outputChars: number }) => void | Promise<void>;
+  },
 ): Promise<ReadableStream<Uint8Array>> {
   const model = opts?.model || AI_CONFIG.model;
   const reasoningEffort = opts?.reasoningEffort || AI_CONFIG.reasoningEffort;
@@ -123,6 +136,20 @@ export async function streamChatCompletion(
   const encoder = new TextEncoder();
   let buffer = "";
 
+  // Réconciliation des crédits : on suit la consommation réelle au fil du flux.
+  let usage: ChatUsage | null = null;
+  let outputChars = 0;
+  let settled = false;
+  const doSettle = async () => {
+    if (settled) return;
+    settled = true;
+    try {
+      await opts?.onSettle?.({ usage, outputChars });
+    } catch (e) {
+      console.error("[ai] réconciliation crédits échouée", e);
+    }
+  };
+
   // On relit le flux SSE d'OpenAI, on extrait le texte de chaque `delta`
   // et on le renvoie tel quel au navigateur.
   return new ReadableStream<Uint8Array>({
@@ -131,6 +158,7 @@ export async function streamChatCompletion(
         const { done, value } = await reader.read();
         if (done) {
           clearIdle();
+          await doSettle(); // consommation réelle connue → règle les crédits
           ctrl.close();
           return;
         }
@@ -150,8 +178,15 @@ export async function streamChatCompletion(
               usage?: { prompt_tokens?: number; completion_tokens?: number };
             };
             const delta = json.choices?.[0]?.delta?.content;
-            if (delta) ctrl.enqueue(encoder.encode(delta));
+            if (delta) {
+              ctrl.enqueue(encoder.encode(delta));
+              outputChars += delta.length;
+            }
             if (json.usage) {
+              usage = {
+                prompt_tokens: json.usage.prompt_tokens,
+                completion_tokens: json.usage.completion_tokens,
+              };
               // Suivi de conso côté serveur (jamais de secret).
               console.log(
                 `[ai] tokens ~ in:${json.usage.prompt_tokens ?? "?"} out:${json.usage.completion_tokens ?? "?"}`,
@@ -163,13 +198,16 @@ export async function streamChatCompletion(
         }
       } catch (err) {
         clearIdle();
+        await doSettle(); // on règle sur ce qui a été produit avant l'erreur
         ctrl.error(err);
       }
     },
-    cancel() {
+    async cancel() {
       // Le client a fermé le flux (bouton « Arrêter ») : on coupe en amont
-      // pour ne pas continuer à consommer des tokens.
+      // pour ne pas continuer à consommer des tokens, et on règle les crédits
+      // sur ce qui a déjà été produit.
       clearIdle();
+      await doSettle();
       try {
         reader.cancel();
       } catch {
@@ -194,7 +232,7 @@ export type GeneratedCard = { t: string; d: string };
 export async function generateCards(
   system: string,
   courseText: string,
-): Promise<GeneratedCard[]> {
+): Promise<{ cards: GeneratedCard[]; usage: ChatUsage | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AI_CONFIG.timeoutMs);
 
@@ -243,7 +281,7 @@ export async function generateCards(
     );
   }
 
-  let json: { choices?: { message?: { content?: string } }[] };
+  let json: { choices?: { message?: { content?: string } }[]; usage?: ChatUsage };
   try {
     json = (await res.json()) as typeof json;
   } catch {
@@ -259,7 +297,7 @@ export async function generateCards(
       502,
     );
   }
-  return cards;
+  return { cards, usage: json.usage ?? null };
 }
 
 /**
@@ -270,7 +308,7 @@ export async function generateCards(
 export async function generateCardsFromImage(
   system: string,
   imageUrl: string,
-): Promise<GeneratedCard[]> {
+): Promise<{ cards: GeneratedCard[]; usage: ChatUsage | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AI_CONFIG.timeoutMs);
 
@@ -320,7 +358,7 @@ export async function generateCardsFromImage(
     );
   }
 
-  let json: { choices?: { message?: { content?: string } }[] };
+  let json: { choices?: { message?: { content?: string } }[]; usage?: ChatUsage };
   try {
     json = (await res.json()) as typeof json;
   } catch {
@@ -336,7 +374,7 @@ export async function generateCardsFromImage(
       502,
     );
   }
-  return cards;
+  return { cards, usage: json.usage ?? null };
 }
 
 /** Extrait un tableau [{t,d}] même si l'IA l'entoure de texte ou de ```json. */

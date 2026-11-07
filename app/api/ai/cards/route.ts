@@ -9,7 +9,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { AI_CONFIG, aiConfigured } from "@/lib/ai/config";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { generateCards, generateCardsFromImage, AiError } from "@/lib/ai/openai";
-import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { getBillingState, reserve, settle, release } from "@/lib/billing/store";
+import {
+  creditsForTokens,
+  estimateInputTokens,
+  estimateOutputTokens,
+} from "@/lib/billing/pricing";
 import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 export const runtime = "nodejs";
@@ -106,23 +111,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Réservation des crédits avant la génération ; remboursement si échec.
-  const spend = await spendCredits(user.id, "cards", {
+  // Les fiches utilisent le modèle « poussé » → moteur Ultra, même portefeuille.
+  // RÉSERVE une estimation (entrée estimée + sortie max) ; le coût réel sera
+  // réglé d'après la consommation renvoyée par le fournisseur.
+  const estInputTokens = estimateInputTokens(text?.length ?? 0) + (image ? 1500 : 0);
+  const estimated = creditsForTokens("ultra", estInputTokens, AI_CONFIG.maxCompletionTokens);
+  const reservation = await reserve(user.id, "cards", {
+    estimated,
+    engine: "ultra",
     hasPaidAccess: billing.hasPaidAccess,
     meta: { model: AI_CONFIG.model, kind, viaImage: !!image },
   });
-  if (!spend.ok) {
-    return insufficientCreditsResponse(spend.needed, spend.balance);
+  if (!reservation.ok) {
+    return insufficientCreditsResponse(reservation.needed, reservation.balance);
   }
 
   try {
     const sys = systemFor(kind, subject);
-    const cards = image
+    const { cards, usage } = image
       ? await generateCardsFromImage(sys, image)
       : await generateCards(sys, text as string);
+    // Réconciliation au coût réel (usage fournisseur si dispo, sinon estimation).
+    const inTok = usage?.prompt_tokens ?? estInputTokens;
+    const outTok = usage?.completion_tokens ?? estimateOutputTokens(JSON.stringify(cards).length);
+    await settle(reservation.reservationId, creditsForTokens("ultra", inTok, outTok));
     return NextResponse.json({ cards, model: AI_CONFIG.model });
   } catch (err) {
-    await refundCredits(user.id, spend.spent, { op: "cards", reason: "cards_failed" }).catch(() => {});
+    await release(reservation.reservationId).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json(
         { error: err.code, message: err.message },

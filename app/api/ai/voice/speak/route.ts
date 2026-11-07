@@ -12,7 +12,8 @@ import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { synthesizeSpeech } from "@/lib/ai/audio";
 import { AiError } from "@/lib/ai/openai";
 import { toVoiceId } from "@/lib/ai/voices";
-import { getBillingState, spendCredits, refundCredits } from "@/lib/billing/store";
+import { getBillingState, reserve, settle, release } from "@/lib/billing/store";
+import { creditCost } from "@/lib/billing/pricing";
 import { insufficientCreditsResponse, featureLockedResponse } from "@/lib/billing/http";
 
 // Runtime Node (Prisma via getCurrentUser + fetch sortant + flux).
@@ -76,17 +77,22 @@ export async function POST(request: NextRequest) {
     return featureLockedResponse("L'assistant vocal est réservé à une offre supérieure.");
   }
 
-  const spend = await spendCredits(user.id, "voice_tts", {
+  // La voix n'expose pas de tokens : coût forfaitaire. On réserve puis on règle
+  // le même montant (rend 0) en cas de succès, ou on libère en cas d'échec.
+  const ttsCost = creditCost("voice_tts");
+  const reservation = await reserve(user.id, "voice_tts", {
+    estimated: ttsCost,
     hasPaidAccess: billing.hasPaidAccess,
     meta: { model: AI_CONFIG.ttsModel, voice },
   });
-  if (!spend.ok) {
-    return insufficientCreditsResponse(spend.needed, spend.balance);
+  if (!reservation.ok) {
+    return insufficientCreditsResponse(reservation.needed, reservation.balance);
   }
 
   // 5) Synthèse → flux audio MP3.
   try {
     const stream = await synthesizeSpeech(parsed.data.text, voice);
+    await settle(reservation.reservationId, ttsCost); // coût forfaitaire confirmé
     return new Response(stream, {
       status: 200,
       headers: {
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
-    await refundCredits(user.id, spend.spent, { op: "voice_tts", reason: "tts_failed" }).catch(() => {});
+    await release(reservation.reservationId).catch(() => {});
     if (err instanceof AiError) {
       return NextResponse.json({ error: err.code, message: err.message }, { status: err.status });
     }
