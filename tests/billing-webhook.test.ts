@@ -321,3 +321,88 @@ describe("P0 nº2 — une seule allocation par période (rejeu & simultané)", (
     await cleanup(u);
   });
 });
+
+// ===========================================================================
+// Sécurité #1 — un renouvellement NON confirmé (past_due) n'octroie jamais une
+// nouvelle allocation ; seul un paiement confirmé (active/trialing) crédite.
+// ===========================================================================
+describe("Sécurité #1 — octroi réservé au paiement confirmé (past_due ≠ allocation)", () => {
+  it("past_due sur une NOUVELLE période : aucune allocation (solde restant conservé)", async () => {
+    const u = await makeUser();
+    const s1 = Math.floor((Date.now() - 31 * DAY) / 1000);
+    const e1 = Math.floor((Date.now() - DAY) / 1000);
+
+    // Cycle 1 payé (active) → une allocation.
+    await syncStripeSubscription(u, basilSub({ id: "sub_pd", userId: u, startSec: s1, endSec: e1 }));
+    expect(await grantRows(u)).toHaveLength(1);
+
+    // L'utilisateur a consommé une partie de son allocation (solde abaissé).
+    await prisma.creditWallet.update({ where: { userId: u }, data: { balance: 100 } });
+
+    // Renouvellement ÉCHOUÉ : Stripe a fait AVANCER la période (end futur) puis
+    // bascule le statut en past_due. AUCUNE nouvelle allocation ne doit être
+    // octroyée, et le solde RESTANT ne doit pas être réinitialisé.
+    const s2 = Math.floor((Date.now() - DAY) / 1000);
+    const e2 = Math.floor((Date.now() + 29 * DAY) / 1000);
+    await syncStripeSubscription(
+      u,
+      basilSub({ id: "sub_pd", userId: u, status: "past_due", startSec: s2, endSec: e2 }),
+    );
+
+    const row = await getSubscriptionRow(u);
+    expect(row?.status).toBe("past_due");
+    expect(row?.currentPeriodStart?.getTime()).toBe(s2 * 1000); // période avancée bien enregistrée
+    expect(await grantRows(u)).toHaveLength(1); // toujours un seul octroi (cycle 1), pas de cycle 2
+    expect(await balanceOf(u)).toBe(100); // solde restant conservé, aucun reset
+    await cleanup(u);
+  });
+
+  it("past_due → active (même période) : l'allocation est attribuée une seule fois", async () => {
+    const u = await makeUser();
+    const s2 = Math.floor((Date.now() - DAY) / 1000);
+    const e2 = Math.floor((Date.now() + 29 * DAY) / 1000);
+
+    // La relance commence en échec (past_due) : aucun octroi.
+    await syncStripeSubscription(
+      u,
+      basilSub({ id: "sub_pa", userId: u, status: "past_due", startSec: s2, endSec: e2 }),
+    );
+    expect(await grantRows(u)).toHaveLength(0);
+    expect(await balanceOf(u)).toBe(0);
+
+    // Le paiement en retard est finalement confirmé → active sur la MÊME période
+    // → l'allocation du cycle est attribuée (exactement une fois).
+    await syncStripeSubscription(
+      u,
+      basilSub({ id: "sub_pa", userId: u, status: "active", startSec: s2, endSec: e2 }),
+    );
+    expect(await grantRows(u)).toHaveLength(1);
+    expect(await balanceOf(u)).toBe(monthlyCreditsFor("plus"));
+    await cleanup(u);
+  });
+
+  it("rejeu du webhook après confirmation : aucun crédit supplémentaire", async () => {
+    const u = await makeUser();
+    const s2 = Math.floor((Date.now() - DAY) / 1000);
+    const e2 = Math.floor((Date.now() + 29 * DAY) / 1000);
+
+    await syncStripeSubscription(
+      u,
+      basilSub({ id: "sub_rp", userId: u, status: "past_due", startSec: s2, endSec: e2 }),
+    );
+    const active = basilSub({ id: "sub_rp", userId: u, status: "active", startSec: s2, endSec: e2 });
+    await syncStripeSubscription(u, active); // confirmation → octroi
+    // Rejeux : deux « active » rejoués ET une relance past_due ultérieure. Rien
+    // ne doit re-créditer ni réinitialiser le solde.
+    await syncStripeSubscription(u, active);
+    await syncStripeSubscription(u, active);
+    await syncStripeSubscription(
+      u,
+      basilSub({ id: "sub_rp", userId: u, status: "past_due", startSec: s2, endSec: e2 }),
+    );
+
+    expect(await grantRows(u)).toHaveLength(1); // une seule allocation, malgré les rejeux
+    expect(await balanceOf(u)).toBe(monthlyCreditsFor("plus"));
+    await cleanup(u);
+  });
+});

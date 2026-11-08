@@ -522,7 +522,24 @@ export async function applySubscriptionState(
   });
 
   // Réconciliation des crédits.
-  if (nowAccess) {
+  //
+  // Tout OCTROI de crédits (allocation de cycle OU différentiel de montée
+  // d'offre) exige un PAIEMENT CONFIRMÉ, c.-à-d. un statut `active` ou
+  // `trialing` (fix sécurité #1). On DÉCOUPLE ainsi deux notions que
+  // `statusHasAccess` confond volontairement :
+  //   • le DROIT D'ACCÈS (consommer le solde restant), qui peut subsister en
+  //     sursis pendant `past_due`/`canceled` jusqu'à la fin de période ;
+  //   • le DROIT À UNE NOUVELLE ALLOCATION, qui n'est accordé qu'une fois le
+  //     paiement confirmé.
+  // Sans ce découplage, un renouvellement ÉCHOUÉ (Stripe fait avancer la
+  // période puis bascule en `past_due`) créditait un mois PLEIN à chaque cycle
+  // non payé pendant toute la fenêtre de relance. Désormais `past_due` conserve
+  // l'accès et le solde restant SANS nouvelle allocation ; quand la relance
+  // aboutit (→ `active`, MÊME période), `grantCycleOnce` crédite une seule fois
+  // (garde d'idempotence `cycleKey`).
+  const paymentConfirmed = p.status === "active" || p.status === "trialing";
+
+  if (paymentConfirmed) {
     const prevPlan: PlanId = prev ? toPlanId(prev.plan) : "free";
     const periodStart = p.currentPeriodStart ?? null;
 
@@ -562,10 +579,15 @@ export async function applySubscriptionState(
       // Baisse d'offre dans le même cycle : aucun changement de solde ici.
       await topUpUpgradeOnce(userId, prevPlan, p.plan, periodStart, p.currentPeriodEnd ?? null);
     }
-  } else if (prevAccess) {
-    // L'accès payant vient de prendre fin → arrêt de l'allocation (0 crédit).
+  } else if (!nowAccess && prevAccess) {
+    // L'accès payant vient de prendre fin (expiration, ou `past_due`/`canceled`
+    // dont la période est désormais échue) → arrêt de l'allocation (0 crédit).
     await endPaidAccess(userId);
   }
+  // Cas restant — `nowAccess` vrai mais paiement NON confirmé (`past_due` ou
+  // `canceled` encore en sursis) : on ne touche PAS au portefeuille. L'accès et
+  // le solde RESTANT sont conservés, mais AUCUNE nouvelle allocation n'est
+  // octroyée tant que le paiement n'est pas confirmé.
 }
 
 // ---------------------------------------------------------------------------
