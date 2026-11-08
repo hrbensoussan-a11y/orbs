@@ -17,6 +17,7 @@
 //     s'applique au cycle suivant.
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type { CreditWallet, Subscription } from "@prisma/client";
 import {
   type PlanId,
@@ -60,15 +61,26 @@ function statusHasAccess(status: string, periodEnd: Date | null): boolean {
 async function getOrCreateWallet(userId: string): Promise<CreditWallet> {
   const existing = await prisma.creditWallet.findUnique({ where: { userId } });
   if (existing) return existing;
-  return prisma.creditWallet.create({
-    data: {
-      userId,
-      balance: 0,
-      allowance: 0,
-      cycleStart: new Date(),
-      cycleEnd: null, // pas de cycle tant qu'il n'y a pas d'abonnement
-    },
-  });
+  try {
+    return await prisma.creditWallet.create({
+      data: {
+        userId,
+        balance: 0,
+        allowance: 0,
+        cycleStart: new Date(),
+        cycleEnd: null, // pas de cycle tant qu'il n'y a pas d'abonnement
+      },
+    });
+  } catch (e) {
+    // Course de création : deux webhooks simultanés pour un tout nouvel
+    // abonnement créent le portefeuille en même temps. La contrainte unique
+    // (userId) n'en laisse passer qu'un ; l'autre relit la ligne déjà créée.
+    if (isUniqueViolation(e)) {
+      const w = await prisma.creditWallet.findUnique({ where: { userId } });
+      if (w) return w;
+    }
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,63 +267,163 @@ function spendReason(op: CreditOp): string {
 
 // ---------------------------------------------------------------------------
 // Octroi d'allocation (activation, renouvellement, montée d'offre)
+//
+// IDEMPOTENCE STRICTE (fix audit Stripe P0 nº2) : chaque octroi lié à une
+// période écrit une ligne de journal portant une `cycleKey` DÉTERMINISTE dérivée
+// du DÉBUT de période. La contrainte unique (userId, cycleKey) fait de cette
+// insertion une GARDE ATOMIQUE en base : deux webhooks rejoués ou livrés
+// SIMULTANÉMENT pour la même période se disputent la même clé, un seul gagne,
+// l'autre heurte la contrainte (P2002) et n'a aucun effet. L'octroi (réécriture
+// du solde) et son marqueur vivent dans la MÊME transaction : pas de marqueur
+// sans octroi (ni l'inverse), même en cas d'interruption.
 // ---------------------------------------------------------------------------
-async function grantCycle(
+
+/** Vrai si l'erreur Prisma est une violation de contrainte unique (P2002). */
+function isUniqueViolation(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+
+/** Clé d'idempotence d'un octroi de cycle, calée sur le début de période. */
+function cycleGrantKey(periodStart: Date): string {
+  return `cycle:${periodStart.toISOString()}`;
+}
+
+/** Clé d'idempotence d'un différentiel de montée d'offre dans une période. */
+function upgradeGrantKey(periodStart: Date, toPlan: PlanId): string {
+  return `upgrade:${periodStart.toISOString()}:${toPlan}`;
+}
+
+/**
+ * Octroi de cycle ATOMIQUE et IDEMPOTENT : ramène le solde à l'allocation de
+ * l'offre (reset « use-it-or-lose-it ») et cale le cycle du portefeuille sur la
+ * période. Garde atomique via `cycleGrantKey(periodStart)` : un seul octroi
+ * aboutit par (utilisateur, période). Renvoie `true` si CET appel a accordé,
+ * `false` si la période était déjà créditée (doublon / rejeu / course).
+ */
+async function grantCycleOnce(
   userId: string,
   plan: PlanId,
   periodStart: Date,
   periodEnd: Date | null,
-): Promise<void> {
+): Promise<boolean> {
   const alloc = monthlyCreditsFor(plan);
+  const cycleKey = cycleGrantKey(periodStart);
+  // Court-circuit SILENCIEUX si la période est déjà créditée (cas courant :
+  // plusieurs événements Stripe — invoice.paid, customer.subscription.updated —
+  // pour le même cycle). Évite une transaction vouée à lever P2002. La garde
+  // ATOMIQUE ci-dessous reste le vrai rempart contre les courses simultanées.
+  if (await prisma.creditLedger.findFirst({ where: { userId, cycleKey }, select: { id: true } })) {
+    return false;
+  }
   const wallet = await getOrCreateWallet(userId);
-  const updated = await prisma.creditWallet.update({
-    where: { userId },
-    data: {
-      balance: alloc, // reset « use-it-or-lose-it »
-      allowance: alloc,
-      cycleStart: periodStart,
-      cycleEnd: periodEnd,
-    },
-  });
-  await prisma.creditLedger.create({
-    data: {
-      walletId: updated.id,
-      userId,
-      delta: alloc - wallet.balance, // mouvement net (octroi, éventuelle expiration du reliquat)
-      balanceAfter: alloc,
-      reason: "grant_cycle",
-      meta: JSON.stringify({ plan }),
-    },
-  });
+  // Solde courant pour le `delta` d'audit (le `balanceAfter` est toujours
+  // l'allocation, puisqu'un octroi de cycle REMET le solde à `alloc`).
+  const before = wallet.balance;
+  try {
+    // Transaction ATOMIQUE en lot (pas d'aller-retour interactif) : l'insertion
+    // du marqueur unique (garde) et le reset du solde réussissent ou échouent
+    // ensemble. Si le marqueur existe déjà (rejeu / course), le `create` lève
+    // P2002 et TOUTE la transaction est annulée → aucun double octroi.
+    await prisma.$transaction([
+      prisma.creditLedger.create({
+        data: {
+          walletId: wallet.id,
+          userId,
+          delta: alloc - before, // mouvement net (octroi, éventuelle expiration du reliquat)
+          balanceAfter: alloc,
+          reason: "grant_cycle",
+          cycleKey,
+          meta: JSON.stringify({ plan, periodStart: periodStart.toISOString() }),
+        },
+      }),
+      prisma.creditWallet.update({
+        where: { userId },
+        data: {
+          balance: alloc, // reset « use-it-or-lose-it »
+          allowance: alloc,
+          cycleStart: periodStart,
+          cycleEnd: periodEnd,
+        },
+      }),
+    ]);
+    return true;
+  } catch (e) {
+    if (isUniqueViolation(e)) return false; // période déjà créditée : aucun effet
+    throw e;
+  }
 }
 
-async function topUpUpgrade(
+/**
+ * Différentiel de MONTÉE d'offre dans un cycle DÉJÀ crédité : crédite seulement
+ * l'écart d'allocation (jamais un reset complet). Atomique et idempotent via
+ * `upgradeGrantKey(periodStart, toPlan)`. L'allocation affichée (jauge) est
+ * toujours alignée sur la nouvelle offre, même quand le différentiel a déjà été
+ * crédité (rejeu) ou qu'il est nul/négatif.
+ */
+async function topUpUpgradeOnce(
   userId: string,
   fromPlan: PlanId,
   toPlan: PlanId,
+  periodStart: Date,
   periodEnd: Date | null,
 ): Promise<void> {
-  const delta = monthlyCreditsFor(toPlan) - monthlyCreditsFor(fromPlan);
+  const alloc = monthlyCreditsFor(toPlan);
+  const delta = alloc - monthlyCreditsFor(fromPlan);
   const wallet = await getOrCreateWallet(userId);
-  const updated = await prisma.creditWallet.update({
-    where: { userId },
-    data: {
-      allowance: monthlyCreditsFor(toPlan),
-      balance: delta > 0 ? { increment: delta } : undefined,
-      cycleEnd: periodEnd ?? wallet.cycleEnd,
-    },
-  });
-  if (delta > 0) {
-    await prisma.creditLedger.create({
-      data: {
-        walletId: updated.id,
-        userId,
-        delta,
-        balanceAfter: updated.balance,
-        reason: "grant_upgrade",
-        meta: JSON.stringify({ fromPlan, toPlan }),
-      },
+
+  // Pas de crédit différentiel positif : on aligne seulement la jauge.
+  if (delta <= 0) {
+    await prisma.creditWallet.update({
+      where: { userId },
+      data: { allowance: alloc, cycleEnd: periodEnd ?? wallet.cycleEnd },
     });
+    return;
+  }
+
+  const cycleKey = upgradeGrantKey(periodStart, toPlan);
+  // Court-circuit SILENCIEUX si ce différentiel a déjà été crédité (rejeu) : on
+  // réaligne seulement la jauge, sans tenter une transaction vouée à P2002.
+  if (await prisma.creditLedger.findFirst({ where: { userId, cycleKey }, select: { id: true } })) {
+    await prisma.creditWallet
+      .update({ where: { userId }, data: { allowance: alloc, cycleEnd: periodEnd ?? wallet.cycleEnd } })
+      .catch(() => {});
+    return;
+  }
+  const before = wallet.balance;
+  try {
+    // Transaction ATOMIQUE en lot : garde unique (userId, cycleKey) + crédit du
+    // différentiel. Un seul différentiel par (utilisateur, période, offre).
+    await prisma.$transaction([
+      prisma.creditLedger.create({
+        data: {
+          walletId: wallet.id,
+          userId,
+          delta,
+          balanceAfter: before + delta,
+          reason: "grant_upgrade",
+          cycleKey,
+          meta: JSON.stringify({ fromPlan, toPlan, periodStart: periodStart.toISOString() }),
+        },
+      }),
+      prisma.creditWallet.update({
+        where: { userId },
+        data: {
+          allowance: alloc,
+          balance: { increment: delta },
+          cycleEnd: periodEnd ?? wallet.cycleEnd,
+        },
+      }),
+    ]);
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    // Différentiel déjà crédité pour cette montée : on garantit tout de même que
+    // la jauge reflète la nouvelle offre, sans re-créditer le solde.
+    await prisma.creditWallet
+      .update({
+        where: { userId },
+        data: { allowance: alloc, cycleEnd: periodEnd ?? wallet.cycleEnd },
+      })
+      .catch(() => {});
   }
 }
 
@@ -411,22 +523,44 @@ export async function applySubscriptionState(
 
   // Réconciliation des crédits.
   if (nowAccess) {
-    const wallet = await getOrCreateWallet(userId);
-    const periodStart = p.currentPeriodStart ?? new Date();
-    const periodChanged =
-      !wallet.cycleStart || wallet.cycleStart.getTime() !== periodStart.getTime();
-    const activating = !prevAccess;
+    const prevPlan: PlanId = prev ? toPlanId(prev.plan) : "free";
+    const periodStart = p.currentPeriodStart ?? null;
 
-    if (periodChanged || activating) {
-      // Première activation ou nouveau cycle de facturation → reset.
-      await grantCycle(userId, p.plan, periodStart, p.currentPeriodEnd ?? null);
-    } else {
-      // Même cycle : seule une MONTÉE d'offre crédite la différence.
-      const prevPlan: PlanId = prev ? toPlanId(prev.plan) : "free";
-      if (PLAN_RANK[p.plan] > PLAN_RANK[prevPlan]) {
-        await topUpUpgrade(userId, prevPlan, p.plan, p.currentPeriodEnd ?? null);
+    if (periodStart == null) {
+      // PÉRIODE INCONNUE : on NE fabrique JAMAIS la date courante pour la clé
+      // d'octroi (sinon chaque webhook rejouerait un octroi à tort — c'était le
+      // bug P0). Le fix du format de période (stripe.ts/subscriptionPeriod)
+      // garantit qu'en pratique elle est connue ; ce garde-fou couvre les états
+      // dégradés (abonnement incomplet, payload partiel). On ne touche pas au
+      // solde ; on peut au plus créditer un différentiel de montée d'offre en
+      // s'appuyant sur une période LOCALE déjà connue.
+      if (
+        prevAccess &&
+        prev?.currentPeriodStart &&
+        PLAN_RANK[p.plan] > PLAN_RANK[prevPlan]
+      ) {
+        await topUpUpgradeOnce(
+          userId,
+          prevPlan,
+          p.plan,
+          prev.currentPeriodStart,
+          p.currentPeriodEnd ?? prev.currentPeriodEnd ?? null,
+        );
       }
+      return;
+    }
+
+    // Octroi de cycle ATOMIQUE et IDEMPOTENT : une seule fois par (utilisateur,
+    // période), que ce soit une activation, un renouvellement ou un rejeu.
+    const granted = await grantCycleOnce(userId, p.plan, periodStart, p.currentPeriodEnd ?? null);
+    if (!granted && prevAccess && PLAN_RANK[p.plan] > PLAN_RANK[prevPlan]) {
+      // Période déjà créditée ET l'utilisateur avait DÉJÀ un accès payant d'une
+      // offre inférieure → MONTÉE d'offre : on crédite le différentiel (idempotent).
+      // `prevAccess` est ESSENTIEL : sans lui, une activation concurrente (où un
+      // autre webhook a déjà accordé la période mais où `prev` est encore lu
+      // « free ») serait prise à tort pour une montée free→offre et re-créditée.
       // Baisse d'offre dans le même cycle : aucun changement de solde ici.
+      await topUpUpgradeOnce(userId, prevPlan, p.plan, periodStart, p.currentPeriodEnd ?? null);
     }
   } else if (prevAccess) {
     // L'accès payant vient de prendre fin → arrêt de l'allocation (0 crédit).

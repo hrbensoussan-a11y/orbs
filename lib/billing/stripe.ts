@@ -150,6 +150,11 @@ export type StripeCheckoutSession = {
 export type StripeSubscriptionItem = {
   id: string;
   price?: { id: string };
+  // Depuis l'API Stripe « basil » (2025-03), la période de facturation vit sur
+  // CHAQUE ligne d'abonnement, plus au niveau de l'abonnement. Optionnelles :
+  // absentes sur les versions antérieures.
+  current_period_start?: number | null;
+  current_period_end?: number | null;
 };
 
 export type StripeSubscription = {
@@ -158,8 +163,11 @@ export type StripeSubscription = {
   customer: string;
   cancel_at_period_end: boolean;
   canceled_at: number | null;
-  current_period_start: number | null;
-  current_period_end: number | null;
+  // Période au niveau abonnement : présente sur les API antérieures à « basil »,
+  // ABSENTE depuis (déplacée sur les lignes `items.data[].current_period_*`).
+  // Optionnelles pour couvrir les deux formats — voir `subscriptionPeriod`.
+  current_period_start?: number | null;
+  current_period_end?: number | null;
   items: { data: StripeSubscriptionItem[] };
   metadata?: Record<string, string>;
 };
@@ -327,4 +335,45 @@ export function verifyWebhookSignature(
 /** Secondes Stripe (epoch) → Date, ou null. */
 export function stripeDate(sec: number | null | undefined): Date | null {
   return sec == null ? null : new Date(sec * 1000);
+}
+
+/**
+ * Période de facturation courante d'un abonnement, TOLÉRANTE AUX DEUX FORMATS
+ * Stripe (fix audit P0 nº1) :
+ *
+ *   • API antérieures à « basil » : `current_period_start` / `current_period_end`
+ *     sont au niveau de l'ABONNEMENT ;
+ *   • API « basil » (2025-03) et suivantes : ces champs ont été RETIRÉS de
+ *     l'abonnement et déplacés sur CHAQUE ligne (`items.data[].current_period_*`).
+ *
+ * On privilégie le niveau abonnement s'il est présent, sinon on lit la ligne.
+ * Les deux bornes proviennent de la MÊME source (abonnement OU une même ligne)
+ * pour ne jamais mélanger deux fenêtres. Renvoie `null` quand la période est
+ * réellement inconnue — l'appelant NE DOIT PAS lui substituer la date courante
+ * (cela déclencherait un octroi de crédits à tort).
+ */
+export function subscriptionPeriod(sub: StripeSubscription): {
+  start: Date | null;
+  end: Date | null;
+} {
+  // Format historique : période portée par l'abonnement lui-même.
+  if (sub.current_period_start != null || sub.current_period_end != null) {
+    return {
+      start: stripeDate(sub.current_period_start),
+      end: stripeDate(sub.current_period_end),
+    };
+  }
+  // Format « basil »+ : période portée par les lignes d'abonnement. On prend la
+  // première ligne qui porte l'information (abonnement mono-ligne dans Orbs).
+  const item = sub.items?.data?.find(
+    (it) => it.current_period_start != null || it.current_period_end != null,
+  );
+  if (item) {
+    return {
+      start: stripeDate(item.current_period_start),
+      end: stripeDate(item.current_period_end),
+    };
+  }
+  // Période réellement inconnue : surtout pas de repli sur l'horloge courante.
+  return { start: null, end: null };
 }

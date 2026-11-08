@@ -15,6 +15,7 @@ import {
   retrieveSubscription,
   retrieveCheckoutSession,
   stripeDate,
+  subscriptionPeriod,
   type StripeEvent,
   type StripeSubscription,
   type StripeCheckoutSession,
@@ -59,14 +60,16 @@ export async function syncStripeSubscription(
     console.warn(`[stripe] webhook: Price inconnu (${priceId}) — abonnement ignoré.`);
     return;
   }
+  // Période TOLÉRANTE AUX DEUX FORMATS Stripe (niveau abonnement OU lignes).
+  const period = subscriptionPeriod(sub);
   await applySubscriptionState(userId, {
     plan,
     status: opts?.forceExpired ? "expired" : mapStatus(sub),
     stripeCustomerId: sub.customer,
     stripeSubscriptionId: sub.id,
     stripePriceId: priceId,
-    currentPeriodStart: stripeDate(sub.current_period_start),
-    currentPeriodEnd: stripeDate(sub.current_period_end),
+    currentPeriodStart: period.start,
+    currentPeriodEnd: period.end,
     cancelAtPeriodEnd: sub.cancel_at_period_end,
     canceledAt: stripeDate(sub.canceled_at),
   });

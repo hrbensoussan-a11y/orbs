@@ -146,6 +146,18 @@ model CreditWallet {
 /// avec le solde résultant (`balanceAfter`) pour reconstituer l'historique sans
 /// recalcul. `reason` catégorise le mouvement ; `engine` précise Core/Ultra pour
 /// une dépense de chat.
+///
+/// `cycleKey` : clé d'IDEMPOTENCE des OCTROIS liés à une période. Un octroi de
+/// cycle (`grant_cycle`) ou de montée d'offre (`grant_upgrade`) porte une clé
+/// déterministe dérivée de l'utilisateur, du type d'octroi et du DÉBUT de
+/// période (jamais de l'horloge courante). La contrainte unique
+/// `@@unique([userId, cycleKey])` fait de l'INSERTION de la ligne une garde
+/// atomique en base : deux webhooks rejoués ou simultanés visant la même période
+/// ne peuvent créditer qu'UNE seule fois (le second heurte la contrainte et
+/// échoue sans effet). Les mouvements qui ne sont pas des octrois de période
+/// (dépenses, expiration, ajustements) laissent `cycleKey` à `null` ; plusieurs
+/// `null` coexistent (SQLite comme Postgres traitent les `null` comme distincts
+/// dans un index unique), donc la contrainte ne gêne que les octrois.
 model CreditLedger {
   id       String       @id @default(cuid())
   walletId String
@@ -158,9 +170,11 @@ model CreditLedger {
   reason       String // grant_signup | grant_cycle | grant_upgrade | spend_chat | spend_cards | spend_voice_stt | spend_voice_tts | expire_cycle | adjust
   engine       String? // "core" | "ultra" | null
   meta         String? // JSON optionnel (modèle, tokens estimés, offre…)
+  cycleKey     String? // clé d'idempotence d'octroi par période (null hors octroi)
 
   createdAt DateTime @default(now())
 
+  @@unique([userId, cycleKey]) // garde atomique : un octroi par (utilisateur, période)
   @@index([userId, createdAt])
   @@index([walletId, createdAt])
 }
