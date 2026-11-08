@@ -1,8 +1,9 @@
 // Offres commerciales d'Orbs et droits associés.
 //
-// Deux offres payantes — Orbs Plus et Orbs Ultimate — plus l'état « gratuit »
-// implicite (aucun abonnement). L'offre « Muse » est VOLONTAIREMENT absente :
-// elle est réservée à une évolution future (ne pas l'ajouter ici).
+// Deux offres payantes UNIQUEMENT — Orbs Plus et Orbs Ultimate. Il N'EXISTE PAS
+// d'offre gratuite : l'id interne « free » représente seulement l'état « sans
+// abonnement actif » (aucun crédit, aucun droit IA), jamais une offre proposée.
+// L'offre « Muse » est VOLONTAIREMENT absente : réservée à une évolution future.
 //
 // Ce module est SANS secret (prix publics, droits, identifiants de Price Stripe
 // qui sont des références non secrètes). Comme pricing.ts, il lit `process.env`
@@ -58,8 +59,10 @@ function num(name: string, fallback: number): number {
 }
 
 // --- Allocations mensuelles (configurables) --------------------------------
+// « free » n'est PAS une offre : c'est l'état « sans abonnement actif ». Il
+// n'accorde AUCUN crédit (pas d'allocation gratuite) et aucun droit IA.
 export const MONTHLY_CREDITS: Record<PlanId, number> = {
-  free: num("CREDITS_MONTHLY_FREE", 300),
+  free: 0, // aucun crédit sans abonnement — jamais d'allocation automatique
   plus: num("CREDITS_MONTHLY_PLUS", 2500),
   ultimate: num("CREDITS_MONTHLY_ULTIMATE", 5000),
 };
@@ -74,26 +77,24 @@ const PRICE_EUR: Record<PaidPlanId, number> = {
 };
 
 export const PLANS: Record<PlanId, PlanConfig> = {
+  // État interne « sans abonnement actif » — PAS une offre commerciale.
+  // Aucun crédit, aucun droit IA : un non-abonné ne peut pas utiliser l'IA.
+  // Jamais affiché comme une carte d'offre ni proposé à la souscription.
   free: {
     id: "free",
-    name: "Orbs Gratuit",
-    tagline: "Pour démarrer et découvrir l'assistant.",
+    name: "Sans abonnement",
+    tagline: "Abonne-toi pour accéder à l'assistant IA.",
     priceEur: 0,
-    monthlyCredits: MONTHLY_CREDITS.free,
+    monthlyCredits: 0,
     entitlements: {
-      engines: ["core"],
-      voice: true,
-      cards: true,
-      rateMaxPerMin: num("RATE_FREE_PER_MIN", 12),
-      rateMaxPerDay: num("RATE_FREE_PER_DAY", 300),
+      engines: [],
+      voice: false,
+      cards: false,
+      rateMaxPerMin: num("RATE_NOSUB_PER_MIN", 6),
+      rateMaxPerDay: num("RATE_NOSUB_PER_DAY", 60),
       prioritySupport: false,
     },
-    features: [
-      "Assistant IA Core (réflexion moyenne)",
-      "Fiches de révision par IA",
-      "Assistant vocal (parler / écouter)",
-      "Journal, Apprendre et Agenda illimités",
-    ],
+    features: [],
   },
   plus: {
     id: "plus",
@@ -110,9 +111,9 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       prioritySupport: false,
     },
     features: [
-      "Tout le gratuit, et surtout :",
-      "Moteur Ultra (réflexion poussée) débloqué",
+      "Moteurs Core (moyen) et Ultra (poussé)",
       "Allocation mensuelle généreuse de crédits",
+      "Assistant vocal + fiches de révision par IA",
       "Débit IA augmenté",
     ],
     highlight: true,

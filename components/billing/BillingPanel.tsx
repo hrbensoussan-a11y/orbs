@@ -79,25 +79,14 @@ export function BillingPanel({
     setBusy(null);
   }
 
-  // Libellé + action du bouton principal d'une carte d'offre.
-  function cardAction(plan: PlanView): { label: string; onClick: () => void; disabled?: boolean } | null {
+  // Libellé + action du bouton principal d'une carte d'offre (Plus / Ultimate).
+  function cardAction(plan: PlanView): { label: string; onClick: () => void } | null {
     if (plan.id === currentPlan) return null; // offre actuelle : pas de bouton d'action
-    const target = RANK[plan.id];
-    const current = RANK[currentPlan];
-
-    if (plan.id === "free") {
-      // Revenir au gratuit = résilier (effet en fin de période).
-      return {
-        label: "Revenir au gratuit",
-        onClick: () => run(`to_${plan.id}`, cancelSubscription),
-      };
-    }
     if (!hasPaidAccess) {
+      // Aucun abonnement → souscription (il n'y a pas d'offre gratuite).
       return { label: `Choisir ${plan.name}`, onClick: () => run(`to_${plan.id}`, () => startCheckout(plan.id)) };
     }
-    if (target > current) {
-      return { label: `Passer à ${plan.name}`, onClick: () => run(`to_${plan.id}`, () => changePlan(plan.id)) };
-    }
+    // Déjà abonné à l'autre offre → changement d'offre (montée ou baisse).
     return { label: `Passer à ${plan.name}`, onClick: () => run(`to_${plan.id}`, () => changePlan(plan.id)) };
   }
 
@@ -179,7 +168,7 @@ export function BillingPanel({
           Toutes les offres partagent le même portefeuille de crédits. Tu peux changer ou résilier à
           tout moment.
         </p>
-        <div className="grid gap-3.5 md:grid-cols-3">
+        <div className="grid gap-3.5 sm:grid-cols-2">
           {plans.map((plan) => {
             const isCurrent = plan.id === currentPlan;
             const action = cardAction(plan);

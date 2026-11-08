@@ -59,16 +59,18 @@ d'un crédit. **Tout est configurable** par variables d'environnement (voir
 
 ### Allocations mensuelles (par défaut, configurables)
 
+**Il n'existe pas d'offre gratuite.** Sans abonnement actif, l'utilisateur a
+**0 crédit** (aucune allocation automatique) et ne peut pas utiliser l'IA.
+
 | Offre | Prix | Crédits / mois | Coût API plafond* |
 | --- | --- | --- | --- |
-| Gratuit | 0 € | 300 | 0,60 € |
 | **Plus** | 12,99 € | 2 500 | 5,00 € |
 | **Ultimate** | 21,99 € | 5 000 | 10,00 € |
 
 \* *Allocation × valeur d'un crédit (0,002 €). Plafond théorique si 100 % des
 crédits sont dépensés : la marge réelle est bien supérieure, peu d'utilisateurs
 épuisant leur allocation.* Les allocations sont réglables via
-`CREDITS_MONTHLY_FREE` / `_PLUS` / `_ULTIMATE`.
+`CREDITS_MONTHLY_PLUS` / `_ULTIMATE`.
 
 ### Facturation « réserver → réconcilier » (par requête)
 
@@ -99,18 +101,22 @@ coût **forfaitaire** (réserve = règlement). Couvert par `tests/credits.test.t
 - **Comptes payants** : à chaque **cycle de facturation** (webhook `invoice.paid`
   de renouvellement), le solde est **ramené** à l'allocation de l'offre
   (modèle « use-it-or-lose-it », pas de cumul).
-- **Comptes gratuits** : rafraîchissement **mensuel « paresseux »** au fil des
-  requêtes (aucune tâche planifiée requise).
+- **Fin d'abonnement** (résiliation arrivée à terme, expiration) : l'allocation
+  **s'arrête** (solde et allocation ramenés à 0, plus de renouvellement). Il n'y
+  a **aucun repli gratuit**. Les crédits des abonnés **actifs** restent intacts.
 
 ### Droits par offre
 
-| Droit | Gratuit | Plus | Ultimate |
+Un compte **sans abonnement** n'a **aucun** droit IA (ni Core, ni Ultra, ni voix,
+ni fiches) et aucun crédit : il doit souscrire pour utiliser l'assistant.
+
+| Droit | Sans abonnement | Plus | Ultimate |
 | --- | --- | --- | --- |
-| Moteur **Core** (réflexion moyenne) | ✅ | ✅ | ✅ |
+| Moteur **Core** (réflexion moyenne) | 🔒 | ✅ | ✅ |
 | Moteur **Ultra** (réflexion poussée) | 🔒 | ✅ | ✅ |
-| Assistant vocal | ✅ | ✅ | ✅ |
-| Fiches par IA | ✅ | ✅ | ✅ |
-| Débit IA (req./min · req./jour) | 12 · 300 | 20 · 600 | 30 · 1200 |
+| Assistant vocal | 🔒 | ✅ | ✅ |
+| Fiches par IA | 🔒 | ✅ | ✅ |
+| Débit IA (req./min · req./jour) | — | 20 · 600 | 30 · 1200 |
 | Support prioritaire | — | — | ✅ |
 
 ## 3. Configuration externe (⚠️ validation humaine requise)

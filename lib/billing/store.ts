@@ -30,14 +30,6 @@ import {
 } from "./plans";
 import { type CreditOp, type CreditEngine, creditCost, creditCosts } from "./pricing";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function freeCycleMs(): number {
-  const raw = process.env.CREDITS_FREE_CYCLE_DAYS;
-  const n = raw == null || raw === "" ? NaN : Number(raw);
-  return (Number.isFinite(n) && n > 0 ? n : 30) * DAY_MS;
-}
-
 // ---------------------------------------------------------------------------
 // Accès « payant actif » : l'utilisateur bénéficie-t-il encore des droits de
 // son offre ? (actif/essai, ou résilié/impayé mais avant la fin de période)
@@ -57,66 +49,26 @@ function statusHasAccess(status: string, periodEnd: Date | null): boolean {
 // ---------------------------------------------------------------------------
 // Portefeuille
 // ---------------------------------------------------------------------------
+/**
+ * Récupère le portefeuille, ou le crée VIDE si absent.
+ *
+ * Il N'Y A PAS d'allocation gratuite : un nouveau compte (ou un compte sans
+ * abonnement) démarre à 0 crédit. Les crédits ne sont accordés que par un
+ * abonnement payant (voir applySubscriptionState / grantCycle). Aucun octroi
+ * automatique à la création.
+ */
 async function getOrCreateWallet(userId: string): Promise<CreditWallet> {
   const existing = await prisma.creditWallet.findUnique({ where: { userId } });
   if (existing) return existing;
-  // Nouveau compte : on crédite tout de suite l'allocation gratuite.
-  const alloc = monthlyCreditsFor("free");
-  const now = new Date();
-  const wallet = await prisma.creditWallet.create({
+  return prisma.creditWallet.create({
     data: {
       userId,
-      balance: alloc,
-      allowance: alloc,
-      cycleStart: now,
-      cycleEnd: new Date(now.getTime() + freeCycleMs()),
+      balance: 0,
+      allowance: 0,
+      cycleStart: new Date(),
+      cycleEnd: null, // pas de cycle tant qu'il n'y a pas d'abonnement
     },
   });
-  await prisma.creditLedger.create({
-    data: {
-      walletId: wallet.id,
-      userId,
-      delta: alloc,
-      balanceAfter: alloc,
-      reason: "grant_signup",
-      meta: JSON.stringify({ plan: "free" }),
-    },
-  });
-  return wallet;
-}
-
-/**
- * Rafraîchissement « paresseux » du portefeuille gratuit : si le cycle mensuel
- * est écoulé et que l'utilisateur n'a pas d'accès payant, on ramène le solde à
- * l'allocation gratuite. Les comptes payants sont rafraîchis par les webhooks.
- */
-async function ensureFreeCycleFresh(
-  userId: string,
-  hasPaidAccess: boolean,
-): Promise<CreditWallet> {
-  const wallet = await getOrCreateWallet(userId);
-  if (hasPaidAccess) return wallet;
-  const now = Date.now();
-  if (wallet.cycleEnd && now <= wallet.cycleEnd.getTime()) return wallet;
-
-  const alloc = monthlyCreditsFor("free");
-  const start = new Date();
-  const end = new Date(start.getTime() + freeCycleMs());
-  const updated = await prisma.creditWallet.update({
-    where: { userId },
-    data: { balance: alloc, allowance: alloc, cycleStart: start, cycleEnd: end },
-  });
-  await prisma.creditLedger.create({
-    data: {
-      walletId: updated.id,
-      userId,
-      delta: alloc - wallet.balance,
-      balanceAfter: alloc,
-      reason: "grant_cycle",
-      meta: JSON.stringify({ plan: "free" }),
-    },
-  });
-  return updated;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,9 +99,10 @@ export type ReserveResult =
   | { ok: false; reason: "insufficient"; needed: number; balance: number };
 
 /**
- * Étape 2 — RÉSERVE `estimated` crédits (retenue sur le solde). Rafraîchit
- * d'abord le cycle gratuit et libère les réservations orphelines. Refuse
- * (étape 8) si le solde disponible est insuffisant, sans rien retenir.
+ * Étape 2 — RÉSERVE `estimated` crédits (retenue sur le solde). Libère d'abord
+ * les réservations orphelines. Refuse (étape 8) si le solde disponible est
+ * insuffisant, sans rien retenir. Un compte sans abonnement a 0 crédit, donc la
+ * réservation échoue : il n'y a aucune allocation automatique.
  */
 export async function reserve(
   userId: string,
@@ -163,7 +116,7 @@ export async function reserve(
 ): Promise<ReserveResult> {
   const estimated = Math.max(1, Math.ceil(info.estimated));
   await releaseStaleReservations(userId);
-  await ensureFreeCycleFresh(userId, info.hasPaidAccess ?? false);
+  await getOrCreateWallet(userId);
 
   // Décrément atomique GARDÉ : ne retient que si le solde couvre l'estimation.
   const res = await prisma.creditWallet.updateMany({
@@ -362,30 +315,33 @@ async function topUpUpgrade(
   }
 }
 
-/** Fin d'accès payant : on plafonne le reliquat au niveau gratuit. */
-async function revertToFree(userId: string): Promise<void> {
-  const freeAlloc = monthlyCreditsFor("free");
+/**
+ * Fin d'accès payant (résiliation arrivée à terme, expiration). L'allocation
+ * s'arrête : plus de crédits, plus de renouvellement. Il n'y a AUCUN repli
+ * gratuit — un non-abonné n'a pas de crédits IA. On journalise le retrait du
+ * reliquat. (Les abonnés ACTIFS ne passent jamais ici : leurs crédits restent
+ * intacts.)
+ */
+async function endPaidAccess(userId: string): Promise<void> {
   const wallet = await getOrCreateWallet(userId);
-  const newBalance = Math.min(wallet.balance, freeAlloc);
-  const start = new Date();
   const updated = await prisma.creditWallet.update({
     where: { userId },
     data: {
-      allowance: freeAlloc,
-      balance: newBalance,
-      cycleStart: start,
-      cycleEnd: new Date(start.getTime() + freeCycleMs()),
+      allowance: 0,
+      balance: 0,
+      cycleStart: new Date(),
+      cycleEnd: null,
     },
   });
-  if (newBalance !== wallet.balance) {
+  if (wallet.balance !== 0) {
     await prisma.creditLedger.create({
       data: {
         walletId: updated.id,
         userId,
-        delta: newBalance - wallet.balance,
-        balanceAfter: newBalance,
+        delta: -wallet.balance,
+        balanceAfter: 0,
         reason: "expire_cycle",
-        meta: JSON.stringify({ plan: "free" }),
+        meta: JSON.stringify({ plan: "none" }),
       },
     });
   }
@@ -473,8 +429,8 @@ export async function applySubscriptionState(
       // Baisse d'offre dans le même cycle : aucun changement de solde ici.
     }
   } else if (prevAccess) {
-    // L'accès payant vient de prendre fin.
-    await revertToFree(userId);
+    // L'accès payant vient de prendre fin → arrêt de l'allocation (0 crédit).
+    await endPaidAccess(userId);
   }
 }
 
@@ -544,7 +500,7 @@ export async function markWebhookProcessed(id: string, type: string): Promise<vo
 export type BillingState = {
   /** Offre dont l'utilisateur bénéficie EFFECTIVEMENT en ce moment. */
   plan: PlanId;
-  /** Statut de l'abonnement (ou "free" si aucun abonnement payant actif). */
+  /** Statut de l'abonnement (ou "none" si aucun abonnement payant actif). */
   status: string;
   entitlements: Entitlements;
   hasPaidAccess: boolean;
@@ -558,9 +514,9 @@ export type BillingState = {
 };
 
 /**
- * État de facturation complet d'un utilisateur. Rafraîchit au passage le cycle
- * gratuit (lazy) et libère les réservations orphelines. À appeler une fois par
- * requête concernée.
+ * État de facturation complet d'un utilisateur. Libère au passage les
+ * réservations orphelines. AUCUN octroi automatique : un non-abonné reste à
+ * 0 crédit. À appeler une fois par requête concernée.
  */
 export async function getBillingState(userId: string): Promise<BillingState> {
   // Libère d'éventuelles réservations orphelines avant de lire le solde.
@@ -570,14 +526,15 @@ export async function getBillingState(userId: string): Promise<BillingState> {
   const hasPaidAccess = sub
     ? statusHasAccess(sub.status, sub.currentPeriodEnd)
     : false;
+  // « free » = état interne « sans abonnement actif » (pas une offre).
   const effectivePlan: PlanId = hasPaidAccess ? toPlanId(sub!.plan) : "free";
 
-  const wallet = await ensureFreeCycleFresh(userId, hasPaidAccess);
+  const wallet = await getOrCreateWallet(userId);
   const usage = await creditUsageByEngine(userId, wallet.cycleStart);
 
   return {
     plan: effectivePlan,
-    status: sub && hasPaidAccess ? sub.status : "free",
+    status: sub && hasPaidAccess ? sub.status : "none",
     entitlements: entitlementsFor(effectivePlan),
     hasPaidAccess,
     wallet: {

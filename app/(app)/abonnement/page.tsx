@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Info, ArrowDownUp } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { getBillingState, recentLedger } from "@/lib/billing/store";
-import { PLANS, PLAN_IDS, type PlanId } from "@/lib/billing/plans";
+import { PLANS, PAID_PLAN_IDS, type PlanId } from "@/lib/billing/plans";
 import { stripeConfigured } from "@/lib/billing/stripe";
 import { reconcileFromCheckoutSession } from "@/lib/billing/webhook";
 import { formatEur, formatShortDate, formatInt } from "@/lib/format";
@@ -32,8 +32,7 @@ const LEDGER_LABEL: Record<string, string> = {
 };
 
 function planPrice(id: PlanId): string {
-  const p = PLANS[id];
-  return p.priceEur > 0 ? `${formatEur(p.priceEur)} / mois` : "Gratuit";
+  return `${formatEur(PLANS[id].priceEur)} / mois`;
 }
 
 export default async function AbonnementPage({
@@ -57,7 +56,8 @@ export default async function AbonnementPage({
   const ultraUnlocked = billing.entitlements.engines.includes("ultra");
   const devSim = !stripeConfigured() && process.env.NODE_ENV !== "production";
 
-  const plans: PlanView[] = PLAN_IDS.map((id) => {
+  // Seules les offres payantes sont proposées (pas d'offre gratuite).
+  const plans: PlanView[] = PAID_PLAN_IDS.map((id) => {
     const p = PLANS[id];
     return {
       id,
@@ -74,7 +74,7 @@ export default async function AbonnementPage({
   const periodEnd = billing.subscription?.currentPeriodEnd ?? null;
   const periodEndLabel = periodEnd ? formatShortDate(periodEnd) : null;
   const statusLabel =
-    billing.status !== "free" ? (STATUS_LABEL[billing.status] ?? null) : null;
+    billing.status !== "none" ? (STATUS_LABEL[billing.status] ?? null) : null;
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)] flex flex-col gap-4">
@@ -115,6 +115,7 @@ export default async function AbonnementPage({
         ultraUnlocked={ultraUnlocked}
         cycleEnd={billing.wallet.cycleEnd}
         usage={billing.usage}
+        hasPaidAccess={billing.hasPaidAccess}
       />
 
       {/* Gestion + comparaison des offres (interactif) */}

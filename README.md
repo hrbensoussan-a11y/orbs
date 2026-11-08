@@ -156,20 +156,23 @@ clé, la voix se désactive proprement comme le reste de l'IA.
 
 ## Abonnements & crédits IA (Plus / Ultimate)
 
-Deux offres payantes — **Orbs Plus** (12,99 €/mois) et **Orbs Ultimate**
-(21,99 €/mois) — alimentent un **portefeuille de crédits unique** qui finance
-tout l'usage de l'IA : les deux moteurs **Core** (réflexion moyenne, mode Luna)
-et **Ultra** (réflexion poussée, mode Terra), la voix et les fiches.
+**Deux offres payantes uniquement** — **Orbs Plus** (12,99 €/mois) et **Orbs
+Ultimate** (21,99 €/mois) — alimentent un **portefeuille de crédits unique** qui
+finance tout l'usage de l'IA : les deux moteurs **Core** (réflexion moyenne, mode
+Luna) et **Ultra** (réflexion poussée, mode Terra), la voix et les fiches. **Il
+n'existe pas d'offre gratuite** : sans abonnement actif, 0 crédit et pas d'accès
+à l'IA (aucune allocation automatique).
 
 - **Crédits non arbitraires** : chaque action a un coût **dérivé des coûts API
   réels** (prix du modèle × consommation estimée ÷ valeur d'un crédit), le tout
   **configurable** par variables d'environnement (`lib/billing/pricing.ts`).
-  Allocations par défaut : 300 (gratuit), 2 500 (Plus), 5 000 (Ultimate) crédits
-  par mois, calées sur une marge saine face au coût API.
+  Allocations par défaut : 2 500 (Plus), 5 000 (Ultimate) crédits par mois,
+  calées sur une marge saine face au coût API.
 - **Cycle de vie complet** : abonnements actifs / en essai / impayés / résiliés /
   expirés, **renouvellement automatique des crédits** au cycle de facturation,
-  **changement d'offre** (montée immédiate au prorata, retour au gratuit en fin
-  de période), résiliation et reprise.
+  **changement d'offre** (montée immédiate au prorata), résiliation et reprise.
+  À la **fin d'un abonnement**, l'allocation s'arrête (retour à 0 crédit) — pas
+  de repli gratuit ; les crédits des abonnés actifs restent intacts.
 - **Paiement sécurisé par Stripe** : pages **hébergées** (Checkout + Billing
   Portal) — aucune donnée de carte ne passe par Orbs — et **webhooks signés**
   comme source de vérité. La clé secrète reste **côté serveur** ; **aucune clé

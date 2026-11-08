@@ -69,7 +69,9 @@ export default async function ComptePage() {
           <span className="block font-semibold leading-tight">{planName}</span>
           <span className="flex items-center gap-1.5 text-sm text-ink-2">
             <Coins size={14} aria-hidden style={{ color: "var(--amber)" }} />
-            {formatInt(billing.wallet.balance)} crédits · gérer mon abonnement
+            {billing.hasPaidAccess
+              ? `${formatInt(billing.wallet.balance)} crédits · gérer mon abonnement`
+              : "Voir les offres Plus & Ultimate"}
           </span>
         </span>
         <ChevronRight size={18} className="text-ink-3 shrink-0" aria-hidden />

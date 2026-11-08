@@ -15,6 +15,7 @@ export function CreditMeter({
   ultraUnlocked,
   cycleEnd,
   usage,
+  hasPaidAccess,
 }: {
   balance: number;
   allowance: number;
@@ -22,7 +23,30 @@ export function CreditMeter({
   ultraUnlocked: boolean;
   cycleEnd: Date | null;
   usage: { core: number; ultra: number; other: number; total: number };
+  hasPaidAccess: boolean;
 }) {
+  // Sans abonnement actif : aucun crédit. On invite à choisir une offre plutôt
+  // que d'afficher une jauge vide (il n'existe pas d'allocation gratuite).
+  if (!hasPaidAccess) {
+    return (
+      <section className="card p-5">
+        <div className="flex items-center gap-2.5 mb-2">
+          <span className="icon-chip amber">
+            <Coins size={22} strokeWidth={1.9} aria-hidden />
+          </span>
+          <div>
+            <h2 className="font-semibold leading-tight">Portefeuille de crédits</h2>
+            <p className="text-sm text-ink-3 leading-snug">Aucun abonnement actif.</p>
+          </div>
+        </div>
+        <p className="text-sm text-ink-2">
+          Les crédits IA (Core &amp; Ultra, voix, fiches) sont inclus dans un abonnement. Choisis une
+          offre ci-dessous pour commencer à utiliser l&apos;assistant.
+        </p>
+      </section>
+    );
+  }
+
   const pct = allowance > 0 ? Math.max(0, Math.min(100, (balance / allowance) * 100)) : 0;
   const coreMsgs = Math.floor(balance / costs.chat_core);
   const ultraMsgs = Math.floor(balance / costs.chat_ultra);

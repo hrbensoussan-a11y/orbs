@@ -13,6 +13,7 @@ import {
   releaseStaleReservations,
   applySubscriptionState,
   creditUsageByEngine,
+  getBillingState,
 } from "@/lib/billing/store";
 import { monthlyCreditsFor } from "@/lib/billing/plans";
 
@@ -172,6 +173,58 @@ describe("service de crédits — réserver → réconcilier", () => {
     });
     expect(await balanceOf(u)).toBe(plus); // renouvelé
     await cleanup(u);
+  });
+
+  it("un compte sans abonnement n'a AUCUN crédit (pas d'allocation automatique)", async () => {
+    const id = `test_${crypto.randomUUID()}`;
+    await prisma.user.create({ data: { id, email: `${id}@test.local`, passwordHash: "x" } });
+
+    const state = await getBillingState(id);
+    expect(state.hasPaidAccess).toBe(false);
+    expect(state.wallet.balance).toBe(0); // aucun crédit gratuit
+    expect(state.wallet.allowance).toBe(0);
+
+    // Aucun octroi de bienvenue au journal.
+    const grants = await prisma.creditLedger.count({
+      where: { userId: id, reason: { startsWith: "grant" } },
+    });
+    expect(grants).toBe(0);
+
+    // Réserver échoue : il n'y a rien à dépenser.
+    const r = await reserve(id, "chat_core", { estimated: 1, engine: "core" });
+    expect(r.ok).toBe(false);
+    await cleanup(id);
+  });
+
+  it("la fin d'abonnement arrête l'allocation (retour à 0 crédit)", async () => {
+    const id = `test_${crypto.randomUUID()}`;
+    await prisma.user.create({ data: { id, email: `${id}@test.local`, passwordHash: "x" } });
+    const now = new Date();
+
+    await applySubscriptionState(id, {
+      plan: "plus",
+      status: "active",
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() + 30 * DAY),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+    });
+    expect((await getBillingState(id)).wallet.balance).toBe(monthlyCreditsFor("plus"));
+
+    // Expiration de l'abonnement.
+    await applySubscriptionState(id, {
+      plan: "plus",
+      status: "expired",
+      currentPeriodStart: now,
+      currentPeriodEnd: new Date(now.getTime() - 1000),
+      cancelAtPeriodEnd: false,
+      canceledAt: new Date(),
+    });
+    const after = await getBillingState(id);
+    expect(after.hasPaidAccess).toBe(false);
+    expect(after.wallet.balance).toBe(0); // plus aucun crédit
+    expect(after.wallet.allowance).toBe(0);
+    await cleanup(id);
   });
 
   it("requêtes simultanées : jamais de solde négatif ni de sur-réservation", async () => {
