@@ -56,6 +56,7 @@ import { CreateDeck } from "./CreateDeck";
 import { StudyPicker, type Mode } from "./StudyPicker";
 import { StudySession } from "./StudySession";
 import { DailyReview } from "./DailyReview";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FOCUS_OPEN_EVENT } from "@/lib/learn/focus";
 
 /** Ouvre la fenêtre de concentration (minuteur global monté dans le layout). */
@@ -180,12 +181,14 @@ function DeckCard({
   ctx,
   setView,
   onShare,
+  onDelete,
   colors,
 }: {
   deck: Deck;
   ctx: LearnCtx;
   setView: (v: View) => void;
   onShare: (id: string) => void;
+  onDelete: (deck: Deck) => void;
   colors?: Record<string, string>;
 }) {
   const hex = subjectColor(deck.subject, colors);
@@ -231,12 +234,7 @@ function DeckCard({
         </button>
         <button
           className="btn-ghost !px-2.5 !py-1.5 ml-auto"
-          onClick={() => {
-            if (confirm(`Supprimer « ${deck.name} » ?`)) {
-              deleteDeck(ctx.s, deck.id);
-              ctx.save();
-            }
-          }}
+          onClick={() => onDelete(deck)}
           aria-label="Supprimer"
         >
           <Trash2 size={14} className="text-coral" aria-hidden />
@@ -272,6 +270,7 @@ function Home({
   const rs = retentionStats(ctx.s);
   const [options, setOptions] = useState(false);
   const [showProg, setShowProg] = useState(false);
+  const [delDeck, setDelDeck] = useState<{ id: string; name: string } | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Couleurs personnalisées des matières (partagées avec l'IA / l'agenda).
@@ -591,7 +590,7 @@ function Home({
                     {!collapsed && (
                       <div className="flex flex-col gap-2.5">
                         {arr.map((d) => (
-                          <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} colors={subjColors} />
+                          <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} onDelete={(x) => setDelDeck({ id: x.id, name: x.name })} colors={subjColors} />
                         ))}
                       </div>
                     )}
@@ -602,12 +601,34 @@ function Home({
           ) : (
             <div className="flex flex-col gap-3 stagger">
               {flatDecks.map((d) => (
-                <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} colors={subjColors} />
+                <DeckCard key={d.id} deck={d} ctx={ctx} setView={setView} onShare={shareDeck} onDelete={(x) => setDelDeck({ id: x.id, name: x.name })} colors={subjColors} />
               ))}
             </div>
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!delDeck}
+        tone="danger"
+        icon={<Trash2 size={20} />}
+        title="Supprimer ce paquet ?"
+        message={
+          delDeck
+            ? `« ${delDeck.name} » et toute sa progression seront définitivement supprimés.`
+            : undefined
+        }
+        confirmLabel="Oui, supprimer"
+        cancelLabel="Non"
+        onCancel={() => setDelDeck(null)}
+        onConfirm={() => {
+          if (delDeck) {
+            deleteDeck(ctx.s, delDeck.id);
+            ctx.save();
+          }
+          setDelDeck(null);
+        }}
+      />
     </div>
   );
 }

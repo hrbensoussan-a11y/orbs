@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import {
   signup,
   login,
@@ -402,9 +403,9 @@ function BackLink({ onBack }: { onBack: () => void }) {
     <button
       type="button"
       onClick={onBack}
-      className="text-sm text-muted underline text-center mt-1"
+      className="flex items-center justify-center gap-1 text-sm text-muted mt-1 hover:text-ink"
     >
-      ← Retour
+      <ArrowLeft size={14} aria-hidden /> <span className="underline">Retour</span>
     </button>
   );
 }
@@ -420,11 +421,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function FieldError({ messages }: { messages?: string[] }) {
   if (!messages?.length) return null;
-  return (
-    <span className="text-xs text-red-600 dark:text-red-400">{messages[0]}</span>
-  );
+  return <span className="text-xs text-coral">{messages[0]}</span>;
 }
 
 function ErrorText({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-red-600 dark:text-red-400">{children}</p>;
+  return <p className="text-sm text-coral">{children}</p>;
 }

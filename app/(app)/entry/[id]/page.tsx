@@ -37,6 +37,8 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
             <button
               className="btn-ghost !px-2.5"
               title={entry.favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-label={entry.favorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+              aria-pressed={entry.favorite}
             >
               <Star
                 size={17}
@@ -50,6 +52,8 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
             <button
               className="btn-ghost !px-2.5"
               title={entry.pinned ? "Désépingler" : "Épingler"}
+              aria-label={entry.pinned ? "Désépingler" : "Épingler"}
+              aria-pressed={entry.pinned}
             >
               <Pin
                 size={17}

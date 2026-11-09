@@ -5,6 +5,7 @@ import { logout } from "@/app/actions/auth";
 import { parseAvatar } from "@/lib/avatar/config";
 import { AvatarCard } from "@/components/avatar/AvatarCard";
 import { AccountForm } from "@/components/AccountForm";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { FamilySettings } from "@/components/family/FamilySettings";
 import { getBillingState } from "@/lib/billing/store";
 import { PLANS } from "@/lib/billing/plans";
@@ -86,9 +87,17 @@ export default async function ComptePage() {
           Tu peux te déconnecter à tout moment. Tes données restent sur ton compte.
         </p>
         <form action={logout}>
-          <button type="submit" className="btn-ghost">
+          <ConfirmSubmit
+            className="btn-ghost"
+            tone="danger"
+            icon={<LogOut size={20} />}
+            title="Se déconnecter ?"
+            message="Tu devras te reconnecter avec ton e-mail et ton mot de passe. Tes données restent sur ton compte."
+            confirmLabel="Oui, me déconnecter"
+            cancelLabel="Non, rester"
+          >
             <LogOut size={16} aria-hidden /> Se déconnecter
-          </button>
+          </ConfirmSubmit>
         </form>
       </section>
     </div>

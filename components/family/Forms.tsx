@@ -29,7 +29,7 @@ export function LinkChildForm() {
           {pending ? "…" : "Relier"}
         </button>
       </div>
-      {state?.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}
+      {state?.error && <p className="text-sm text-coral">{state.error}</p>}
     </form>
   );
 }
@@ -77,7 +77,7 @@ export function CheerComposer({ childId, stickers }: { childId: string; stickers
           <Send size={17} aria-hidden />
         </button>
       </div>
-      {state?.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}
+      {state?.error && <p className="text-sm text-coral">{state.error}</p>}
       {sent && (
         <p className="text-sm text-green-ink font-semibold flex items-center gap-2" role="status">
           <span className="pop text-2xl" aria-hidden>{sent}</span> Envoyé ! Il s’affichera sur son accueil.
@@ -160,7 +160,7 @@ export function ChallengeComposer({ childId, kinds }: { childId: string; kinds: 
         className="input"
         aria-label="Récompense"
       />
-      {state?.error && <p className="text-sm text-red-600 dark:text-red-400">{state.error}</p>}
+      {state?.error && <p className="text-sm text-coral">{state.error}</p>}
       <div className="flex gap-2 justify-end">
         <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
           Annuler

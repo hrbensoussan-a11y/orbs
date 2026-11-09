@@ -5,10 +5,12 @@ Assistant scolaire pour élève, en un seul endroit : **scolarité** (Pronote /
 **journal** et **agenda/tâches**. Style **glassmorphism « Verre & Jardin »**
 (voir [`direction-artistique.md`](./direction-artistique.md)).
 
-> État actuel : le **shell** (accueil + navigation) et le **journal** sont en
-> place et **fonctionnels**, ainsi que **Apprendre**, **Journal** et le
-> **mode IA** (assistant OpenAI). Le module **Agenda** et la **scolarité**
-> (Pronote) restent en préparation.
+> État actuel : le **shell** (accueil + navigation), le **journal**,
+> **Apprendre**, l'**agenda** (devoirs + emploi du temps), les **notes &
+> moyennes** et le **mode IA** (assistant OpenAI) sont en place et
+> **fonctionnels**. Seule la **scolarité** (Pronote / École Directe) reste à
+> connecter — les tuiles concernées de l'accueil sont clairement marquées
+> « Pas encore connecté ».
 
 ## Stack
 
@@ -31,11 +33,11 @@ npm run dev                  # http://localhost:3000
 
 | Onglet | Route | État |
 | --- | --- | --- |
-| Menu (accueil) | `/accueil` | Maquette (données scolarité = équipe Pronote) |
+| Menu (accueil) | `/accueil` | **Fonctionnel** · tuiles scolarité (Pronote) à connecter |
 | Apprendre | `/apprendre` | **Fonctionnel** (5 types de fiches) |
 | IA | `/ia` | **Fonctionnel** (assistant OpenAI, clé serveur requise) |
 | Journal | `/timeline` | **Fonctionnel** |
-| Agenda | `/agenda` | En préparation |
+| Agenda | `/agenda` | **Fonctionnel** (devoirs + emploi du temps, local) |
 
 ## Le module Apprendre (fonctionnel)
 

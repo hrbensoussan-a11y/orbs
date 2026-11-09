@@ -355,7 +355,7 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   if (!text) return null;
   return (
     <span
-      className={`text-xs ${status === "error" ? "text-red-500" : "text-muted"}`}
+      className={`text-xs ${status === "error" ? "text-coral" : "text-muted"}`}
     >
       {text}
     </span>

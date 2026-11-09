@@ -319,7 +319,7 @@ export function CreateDeck({
               {photo && (
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1 text-sm text-ink-2">
-                    <span>{photoLoading ? "L’IA lit ta photo…" : "Recopie le contenu ci-dessous 👇"}</span>
+                    <span>{photoLoading ? "L’IA lit ta photo…" : "Recopie le contenu ci-dessous"}</span>
                     <button className="text-ink-3 hover:text-ink" onClick={() => { URL.revokeObjectURL(photo); setPhoto(null); }} aria-label="Retirer la photo">
                       <X size={16} aria-hidden />
                     </button>

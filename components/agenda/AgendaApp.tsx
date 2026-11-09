@@ -166,7 +166,7 @@ function Devoirs({
 
       {todo.length === 0 && done.length === 0 && (
         <p className="text-center text-ink-3 text-sm py-6">
-          Aucun devoir pour l’instant. Ajoute-en un ci-dessus 👆
+          Aucun devoir pour l’instant. Ajoute-en un juste au-dessus.
         </p>
       )}
 
@@ -188,11 +188,14 @@ function Devoirs({
                 <div key={h.id} className="card p-3 flex items-center gap-3">
                   <button
                     onClick={() => toggle(h.id)}
-                    className="h-6 w-6 shrink-0 rounded-full border-2 grid place-items-center"
-                    style={{ borderColor: "var(--line)" }}
+                    className="group h-6 w-6 shrink-0 rounded-full border-2 border-line grid place-items-center transition-colors hover:border-green"
                     aria-label="Marquer comme fait"
                   >
-                    <Check size={13} className="text-ink-3 opacity-0" aria-hidden />
+                    <Check
+                      size={13}
+                      className="text-green-ink opacity-0 transition-opacity group-hover:opacity-60"
+                      aria-hidden
+                    />
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="font-medium leading-snug">{h.title}</div>

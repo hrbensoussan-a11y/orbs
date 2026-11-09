@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Palette, X } from "lucide-react";
 
 export const APPEARANCE_KEY = "orbs.appearance";
@@ -43,6 +43,24 @@ function apply(a: Appearance) {
 export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row" }) {
   const [open, setOpen] = useState(false);
   const [ap, setAp] = useState<Appearance>(read);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Fenêtre ouverte : focus sur « Fermer », fermeture au clavier (Échap) et
+  // page figée derrière — mêmes garanties que ConfirmDialog.
+  useEffect(() => {
+    if (!open) return;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
 
   function update(patch: Partial<Appearance>) {
     setAp((prev) => {
@@ -86,10 +104,13 @@ export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row
               borderRadius: "26px 26px 0 0",
               paddingBottom: "calc(1rem + env(safe-area-inset-bottom,0px))",
             }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="appearance-dialog-title"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-lg">Apparence</h2>
-              <button className="btn-ghost !px-2.5" onClick={() => setOpen(false)} aria-label="Fermer">
+              <h2 id="appearance-dialog-title" className="font-semibold text-lg">Apparence</h2>
+              <button ref={closeRef} className="btn-ghost !px-2.5" onClick={() => setOpen(false)} aria-label="Fermer">
                 <X size={18} aria-hidden />
               </button>
             </div>

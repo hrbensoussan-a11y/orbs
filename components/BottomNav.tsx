@@ -18,6 +18,7 @@ export function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Navigation principale">
       <div className="nav-brand" aria-hidden>
+        <span className="orb" />
         <span>Orbs</span>
       </div>
       {ITEMS.map(({ href, label, Icon, match }) => {
