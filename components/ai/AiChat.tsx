@@ -198,7 +198,13 @@ export function AiChat({
     setConvs(c);
     setLoaded(true);
     try {
-      if (localStorage.getItem(PANEL_KEY) === "0") setShowPanel(false);
+      // Colonne « Discussions » : masquée si l'utilisateur l'a repliée, et
+      // repliée par défaut sur téléphone et tablette portrait (où elle s'ouvre
+      // en tiroir par-dessus le chat) pour laisser toute la largeur à la
+      // conversation ; ouverte par défaut sur grand écran (≥ 900px).
+      const panelPref = localStorage.getItem(PANEL_KEY);
+      if (panelPref === "0") setShowPanel(false);
+      else if (panelPref === null && window.innerWidth < 900) setShowPanel(false);
       const v = localStorage.getItem(VOICE_KEY);
       if (v) setVoiceState(toVoiceId(v));
       if (localStorage.getItem(AUTOPLAY_KEY) === "0") setAutoplayState(false);
@@ -356,6 +362,9 @@ export function AiChat({
     setInput("");
     setPendingAction(null);
     setGhost(null);
+    // En mode tiroir (téléphone / tablette portrait), une fois la discussion
+    // choisie, on referme la colonne pour revenir au chat en pleine largeur.
+    if (typeof window !== "undefined" && window.innerWidth < 900) setShowPanel(false);
     setTimeout(() => inputRef.current?.focus(), 40);
   }
 
@@ -609,9 +618,18 @@ export function AiChat({
 
   return (
     <div className="w-full px-3 sm:px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)]">
-      <div className="flex gap-3 items-stretch" style={{ minHeight: "calc(100dvh - 150px)" }}>
-        {/* Panneau des discussions (à gauche, masquable) */}
+      <div className="relative flex gap-3 items-stretch" style={{ minHeight: "calc(100dvh - 150px)" }}>
+        {/* Panneau des discussions (à gauche, masquable ; en tiroir sur téléphone) */}
         {showPanel && (
+          <>
+          {/* Voile tactile pour refermer le tiroir — visible tant que la colonne
+              est en tiroir (téléphone / tablette portrait, < 900px) */}
+          <div
+            className="absolute inset-0 z-10 min-[900px]:hidden"
+            style={{ background: "rgba(31,41,68,.25)" }}
+            onClick={togglePanel}
+            aria-hidden
+          />
           <aside className="ai-panel card p-2">
               <div className="flex items-center justify-between px-1.5 py-1 mb-1">
                 <span className="text-sm font-semibold">Discussions</span>
@@ -721,6 +739,7 @@ export function AiChat({
                 </div>
               </div>
           </aside>
+          </>
         )}
 
         {/* Chat */}

@@ -28,8 +28,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
     <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+14px)] pb-6">
       {/* Barre d'actions */}
       <div className="flex items-center justify-between gap-2 mb-4">
-        <Link href="/timeline" className="btn-ghost !py-1.5">
-          <ArrowLeft size={16} aria-hidden /> Journal
+        <Link
+          href="/timeline"
+          className="btn-ghost !py-1.5 !px-2.5 sm:!px-3.5"
+          aria-label="Retour au journal"
+        >
+          <ArrowLeft size={16} aria-hidden />
+          <span className="hidden min-[360px]:inline">Journal</span>
         </Link>
         <div className="flex items-center gap-1.5">
           <form action={toggleFavorite}>
@@ -62,8 +67,13 @@ export default async function EntryPage({ params }: PageProps<"/entry/[id]">) {
               />
             </button>
           </form>
-          <Link href={`/write/${entry.id}`} className="btn-ghost !py-1.5">
-            <Pencil size={15} aria-hidden /> Modifier
+          <Link
+            href={`/write/${entry.id}`}
+            className="btn-ghost !py-1.5 !px-2.5 sm:!px-3.5"
+            aria-label="Modifier"
+          >
+            <Pencil size={15} aria-hidden />
+            <span className="hidden min-[360px]:inline">Modifier</span>
           </Link>
           <DeleteEntryButton action={deleteEntry} id={entry.id} />
         </div>

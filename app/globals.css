@@ -430,14 +430,17 @@ body.studying .ai-orb { display: none !important; }
 .nav-brand { display: none; align-items: center; gap: 10px; padding: 4px 12px 16px; font-weight: 700; font-size: 1.2rem; letter-spacing: -0.01em; }
 .nav-brand .orb { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, var(--green), var(--sky)); flex: none; }
 
-/* ---- Mise en page bureau (≥ 900px) : barre latérale + contenu large ---- */
-@media (min-width: 900px) {
-  .app-shell { padding-left: 244px; }
+/* ---- Mise en page tablette & bureau (≥ 768px) : barre latérale + contenu large ----
+   La barre latérale apparaît dès la tablette (iPad portrait) : sur ces largeurs on
+   ne veut pas d'une « version mobile agrandie » (colonne étroite + bulle flottante),
+   mais une vraie mise en page avec navigation permanente à gauche. */
+@media (min-width: 768px) {
+  .app-shell { padding-left: 232px; }
   .app-main { padding-bottom: 40px !important; }
-  .app-main > * { max-width: 900px !important; padding-top: 40px !important; }
+  .app-main > * { max-width: 900px !important; padding-top: 36px !important; }
   .bottom-nav {
     top: 16px; bottom: 16px; left: 16px; transform: none;
-    width: 212px; flex-direction: column; justify-content: flex-start; align-items: stretch;
+    width: 200px; flex-direction: column; justify-content: flex-start; align-items: stretch;
     gap: 5px; border-radius: 26px; padding: 18px 12px;
   }
   .nav-brand { display: flex; }
@@ -445,6 +448,12 @@ body.studying .ai-orb { display: none !important; }
     flex: 0 0 auto; flex-direction: row; justify-content: flex-start; align-items: center;
     gap: 13px; padding: 11px 15px; font-size: 0.94rem; border-radius: 15px;
   }
+}
+/* À partir de ~900px on peut offrir une barre un peu plus large et respirante. */
+@media (min-width: 900px) {
+  .app-shell { padding-left: 244px; }
+  .app-main > * { padding-top: 40px !important; }
+  .bottom-nav { width: 212px; }
 }
 @media (min-width: 1280px) { .app-main > * { max-width: 960px !important; } }
 
@@ -713,15 +722,27 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 .ai-ghost-text { color: var(--ink-3); opacity: 0.8; }
 
 /* ===================== Panneau des discussions IA (à gauche) ===================== */
+/* Sur téléphone et tablette portrait, la colonne s'ouvre en tiroir par-dessus
+   le chat (position absolue) pour ne pas écraser la conversation ; dès 900px
+   (bureau / tablette paysage), elle reprend sa place dans le flux, à gauche. */
 .ai-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  width: min(320px, 86%);
   flex: none;
-  width: 150px;
-  align-self: stretch;
   display: flex;
   flex-direction: column;
 }
-@media (min-width: 640px) { .ai-panel { width: 220px; } }
-@media (min-width: 900px) { .ai-panel { width: 248px; } }
+@media (min-width: 900px) {
+  .ai-panel {
+    position: static;
+    width: 248px;
+    align-self: stretch;
+  }
+}
 
 /* ===================== Accessibilité : réduire les animations ===================== */
 /* Activé via le réglage « Réduire les animations » (data-motion="reduced" posé

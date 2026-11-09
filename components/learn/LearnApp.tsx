@@ -442,16 +442,18 @@ function Home({
         </button>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button className="btn-primary" onClick={() => setView({ name: "create" })}>
           <Plus size={16} aria-hidden /> Nouveau paquet
         </button>
-        <button className="btn-ghost !py-1.5 ml-auto" onClick={() => setShowProg((o) => !o)}>
-          <BarChart3 size={15} aria-hidden /> Progrès
-        </button>
-        <button className="btn-ghost !py-1.5" onClick={() => setOptions((o) => !o)}>
-          <SlidersHorizontal size={15} aria-hidden /> Options
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <button className="btn-ghost !py-1.5" onClick={() => setShowProg((o) => !o)}>
+            <BarChart3 size={15} aria-hidden /> Progrès
+          </button>
+          <button className="btn-ghost !py-1.5" onClick={() => setOptions((o) => !o)}>
+            <SlidersHorizontal size={15} aria-hidden /> Options
+          </button>
+        </div>
       </div>
 
       {showProg && (

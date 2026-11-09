@@ -91,7 +91,16 @@ export function AiOrb() {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(p);
-    place(initial ?? { x: EDGE + 6, y: window.innerHeight - SIZES[p.size] - 96 });
+    // Position par défaut (si rien de mémorisé) adaptée à la mise en page :
+    // - téléphone (barre centrale en bas) : en bas à gauche, au-dessus de la barre ;
+    // - tablette / bureau (barre latérale à gauche) : en bas à droite, pour ne
+    //   pas recouvrir la navigation.
+    const sidebar = window.innerWidth >= 768;
+    const orbSize = SIZES[p.size];
+    const defaultPos = sidebar
+      ? { x: window.innerWidth - orbSize - (EDGE + 16), y: window.innerHeight - orbSize - 24 }
+      : { x: EDGE + 6, y: window.innerHeight - orbSize - 96 };
+    place(initial ?? defaultPos);
   }, [place]);
 
   // Réglages modifiés ailleurs (page Réglages, autre onglet) : on relit.

@@ -67,7 +67,7 @@ export default async function AccueilPage() {
         <RappelsCard wroteToday={wroteToday} />
 
         {/* Tuiles scolarité (pas encore connectées) */}
-        <div className="grid grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3.5">
           {TILES.map((t) => (
             <div key={t.key} className="card p-3.5 flex items-center gap-3">
               <span className={`icon-chip ${t.tone}`}>

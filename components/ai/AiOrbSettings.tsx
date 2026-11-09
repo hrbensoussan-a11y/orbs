@@ -108,12 +108,12 @@ export function AiOrbSettings() {
       </div>
 
       {/* Taille */}
-      <div className="flex items-center justify-between gap-4 border-t border-line pt-4">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-line pt-4">
+        <div className="min-w-0">
           <p>Taille</p>
           <p className="text-sm text-ink-2">Agrandis ou réduis la bulle.</p>
         </div>
-        <div className="flex gap-1.5" role="group" aria-label="Taille de la bulle IA">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Taille de la bulle IA">
           {SIZE_LABELS.map((s) => (
             <button
               key={s.key}
