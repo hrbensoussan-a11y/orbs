@@ -8,6 +8,8 @@
 // à la bulle via l'évènement "orbs:aiorb".
 
 import { useEffect, useState } from "react";
+import { EyeOff } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const PREFS_KEY = "orbs.aiorb.prefs";
 
@@ -36,6 +38,8 @@ export function AiOrbSettings() {
   const [show, setShow] = useState(true);
   const [size, setSize] = useState<SizeKey>("md");
   const [style, setStyle] = useState<StyleKey>("minimal");
+  // Confirmation avant d'enlever la bulle (elle disparaît de toutes les pages).
+  const [confirmHide, setConfirmHide] = useState(false);
 
   useEffect(() => {
     try {
@@ -89,7 +93,10 @@ export function AiOrbSettings() {
           role="switch"
           aria-checked={show}
           aria-label="Afficher la bulle IA"
-          onClick={() => changeShow(!show)}
+          onClick={() => {
+            if (show) setConfirmHide(true);
+            else changeShow(true);
+          }}
           className="relative h-8 w-14 flex-none rounded-full transition-colors"
           style={{ background: show ? "var(--green)" : "color-mix(in srgb, var(--ink-3) 40%, transparent)" }}
         >
@@ -172,6 +179,21 @@ export function AiOrbSettings() {
           })}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmHide}
+        tone="danger"
+        icon={<EyeOff size={20} />}
+        title="Enlever la bulle IA ?"
+        message="Le petit rond qui ouvre l’assistant disparaîtra de toutes les pages. Tu pourras toujours ouvrir l’IA depuis le menu du bas, et la réafficher ici quand tu veux."
+        confirmLabel="Oui, l’enlever"
+        cancelLabel="Non, la garder"
+        onCancel={() => setConfirmHide(false)}
+        onConfirm={() => {
+          setConfirmHide(false);
+          changeShow(false);
+        }}
+      />
     </div>
   );
 }

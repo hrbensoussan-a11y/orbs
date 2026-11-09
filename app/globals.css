@@ -229,6 +229,27 @@ body::after {
 .btn-primary:active { transform: scale(0.97); }
 .btn-primary:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
 
+/* Variante « action importante / destructrice » (confirmations). */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  background: var(--coral);
+  color: #fff;
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 0.62rem 1.15rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: var(--shadow-soft);
+  transition: transform var(--t-micro) var(--ease), box-shadow var(--t-base) var(--ease), filter var(--t-base);
+  cursor: pointer;
+}
+.btn-danger:hover { box-shadow: var(--shadow-float); filter: brightness(1.03); }
+.btn-danger:active { transform: scale(0.97); }
+.btn-danger:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -275,6 +296,50 @@ select.input { appearance: none; }
   font-size: 0.78rem;
   font-weight: 500;
   line-height: 1.5;
+}
+
+/* ===================== Contrôle segmenté (choix style iOS) ===================== */
+/* Un groupe de boutons-radio côte à côte ; l'option cochée ressort. Accessible
+   et sans JS : l'état vient d'un <input type="radio"> masqué dans chaque label. */
+.seg {
+  display: flex;
+  gap: 4px;
+  background: var(--fill);
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--r-pill);
+  padding: 4px;
+}
+.seg > label {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: var(--r-pill);
+  padding: 0.5rem 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--ink-2);
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--t-micro) var(--ease), color var(--t-micro) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.seg > label:has(input:checked) {
+  background: var(--glass-strong);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+.seg > label:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--green) 60%, transparent);
+  outline-offset: 2px;
+}
+.seg input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Chip d'icône pastel (carré arrondi) */
@@ -657,3 +722,16 @@ svg.av-live .av-wavehand { animation: avWave 1.3s ease-in-out infinite; transfor
 }
 @media (min-width: 640px) { .ai-panel { width: 220px; } }
 @media (min-width: 900px) { .ai-panel { width: 248px; } }
+
+/* ===================== Accessibilité : réduire les animations ===================== */
+/* Activé via le réglage « Réduire les animations » (data-motion="reduced" posé
+   sur <html> par le script d'init du layout, puis à la volée). On coupe
+   animations et transitions partout, pour le confort et les téléphones lents. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
