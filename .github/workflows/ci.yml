@@ -7,9 +7,12 @@
 # uniquement destinées à laisser Next.js et Prisma démarrer.
 name: CI
 
+# `push` suffit : les pull requests de ce dépôt partent de ses propres branches,
+# et GitHub affiche les vérifications du commit sur la PR. Déclarer aussi
+# `pull_request` ferait tourner chaque push deux fois (PR nº1 orbs → main).
 on:
   push:
-  pull_request:
+  workflow_dispatch:
 
 # Un seul run par branche : un nouveau push annule le précédent encore en cours.
 concurrency:
