@@ -1,0 +1,59 @@
+# Intégration continue d'Orbs — garde-fou du site web pendant le chantier
+# Orbs 3.0 (application iOS/Android). Quatre vérifications indépendantes et
+# parallèles : typecheck, lint, tests, build de production.
+#
+# Aucun secret n'est nécessaire : la CI ne parle à aucun service externe
+# (Stripe, OpenAI, Brevo). Les variables ci-dessous sont des valeurs FACTICES
+# uniquement destinées à laisser Next.js et Prisma démarrer.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Un seul run par branche : un nouveau push annule le précédent encore en cours.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Base SQLite jetable, créée par `prisma migrate deploy` (voir tests/setup).
+  DATABASE_URL: "file:./dev.db"
+  # Valeur factice (non secrète) : lib/session.ts exige la variable au chargement.
+  SESSION_SECRET: "ci-valeur-factice-non-secrete-ne-jamais-utiliser-en-production"
+
+jobs:
+  verify:
+    name: ${{ matrix.check }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [typecheck, lint, test, build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # `postinstall` lance `prisma generate` (client Prisma typé).
+      - name: Dépendances
+        run: npm ci
+
+      # Les tests copient prisma/dev.db (absent d'un checkout propre) : on la
+      # crée à partir des migrations, exactement comme en local.
+      - name: Base de données de test (SQLite)
+        if: matrix.check == 'test'
+        run: npx prisma migrate deploy
+
+      - name: ${{ matrix.check }}
+        run: npm run ${{ matrix.check }}

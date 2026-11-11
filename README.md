@@ -29,6 +29,17 @@ npx prisma migrate dev
 npm run dev                  # http://localhost:3000
 ```
 
+## Qualité & feuille de route
+
+- **Intégration continue** : `.github/workflows/ci.yml` lance `typecheck`, `lint`,
+  `test` et `build` sur chaque push et pull request (aucun secret requis).
+- `npm run typecheck` génère d'abord les types de routes Next 16 (`next typegen`),
+  puis lance `tsc --noEmit` : indispensable sur un clone frais.
+- **Orbs 3.0 (application iOS/Android)** : plan global dans
+  [`docs/orbs-3.0-plan.md`](./docs/orbs-3.0-plan.md) ; étude de la migration
+  SQLite → PostgreSQL (non exécutée) dans
+  [`docs/migration-postgresql.md`](./docs/migration-postgresql.md).
+
 ## Navigation (barre en verre, en bas)
 
 | Onglet | Route | État |
