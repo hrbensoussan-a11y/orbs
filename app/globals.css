@@ -435,9 +435,17 @@ body.studying .ai-orb { display: none !important; }
    ne veut pas d'une « version mobile agrandie » (colonne étroite + bulle flottante),
    mais une vraie mise en page avec navigation permanente à gauche. */
 @media (min-width: 768px) {
-  .app-shell { padding-left: 232px; }
+  .app-shell { padding-left: 232px; padding-right: 16px; }
   .app-main { padding-bottom: 40px !important; }
-  .app-main > * { max-width: 900px !important; padding-top: 36px !important; }
+  /* `margin-inline: auto` est ESSENTIEL : sans lui, une page dont la racine ne
+     porte pas déjà `mx-auto` (chat IA, notes) reste collée contre la barre
+     latérale, avec tout le vide rejeté à droite sur un grand écran. Le plafond
+     de largeur centre désormais TOUTES les pages de la même façon. */
+  .app-main > * {
+    max-width: 900px !important;
+    margin-inline: auto !important;
+    padding-top: 36px !important;
+  }
   .bottom-nav {
     top: 16px; bottom: 16px; left: 16px; transform: none;
     width: 200px; flex-direction: column; justify-content: flex-start; align-items: stretch;
