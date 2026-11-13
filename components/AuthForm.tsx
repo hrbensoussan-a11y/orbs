@@ -12,6 +12,7 @@ import {
   requestPasswordReset,
   resetPassword,
   resendCode,
+  loginWithProCode,
   type AuthNext,
   type AuthState,
 } from "@/app/actions/auth";
@@ -23,7 +24,8 @@ const RESEND_COOLDOWN_SECONDS = 45;
 type Screen =
   | { kind: "credentials" }
   | { kind: "email"; purpose: "login" | "reset" }
-  | { kind: "code"; next: AuthNext };
+  | { kind: "code"; next: AuthNext }
+  | { kind: "pro" };
 
 /** Formulaire d'authentification : mot de passe + connexion/vérification par code. */
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
@@ -38,6 +40,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
 
   if (screen.kind === "code") {
     return <CodeForm next={screen.next} onBack={toCredentials} />;
+  }
+  if (screen.kind === "pro") {
+    return <ProCodeForm onBack={toCredentials} />;
   }
   if (screen.kind === "email") {
     return (
@@ -55,6 +60,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       defaultEmail={email}
       onCode={goCode}
       onSwitch={(purpose) => setScreen({ kind: "email", purpose })}
+      onPro={() => setScreen({ kind: "pro" })}
     />
   );
 }
@@ -68,11 +74,13 @@ function CredentialsForm({
   defaultEmail,
   onCode,
   onSwitch,
+  onPro,
 }: {
   mode: "login" | "register";
   defaultEmail: string;
   onCode: (next: AuthNext) => void;
   onSwitch: (purpose: "login" | "reset") => void;
+  onPro: () => void;
 }) {
   const isRegister = mode === "register";
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
@@ -199,6 +207,65 @@ function CredentialsForm({
           </>
         )}
       </p>
+
+      {/* Accès professionnel : connexion par code permanent, sans e-mail. */}
+      <p className="text-sm text-center border-t border-line pt-3 mt-1">
+        <button
+          type="button"
+          onClick={onPro}
+          className="text-muted underline hover:text-ink"
+        >
+          Vous avez un code professionnel ?
+        </button>
+      </p>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Écran « Accès professionnel » : code permanent à 8 chiffres, sans e-mail.
+// Le compte associé au code (déjà prêt, abonnement Orbs Ultimate) s'ouvre
+// directement — pensé pour les tests et les démonstrations clients.
+// ---------------------------------------------------------------------------
+
+function ProCodeForm({ onBack }: { onBack: () => void }) {
+  const [state, formAction, pending] = useActionState<AuthState, FormData>(
+    loginWithProCode,
+    undefined,
+  );
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4" noValidate>
+      <div>
+        <h2 className="font-serif text-xl">Accès professionnel</h2>
+        <p className="text-sm text-muted mt-1">
+          Entre ton code professionnel à 8 chiffres : il ouvre un compte déjà
+          prêt, sans adresse e-mail ni mot de passe.
+        </p>
+      </div>
+
+      <Field label="Code professionnel">
+        <input
+          name="code"
+          inputMode="numeric"
+          autoComplete="off"
+          pattern="\d{8}"
+          maxLength={8}
+          required
+          autoFocus
+          placeholder="12345678"
+          className="input tracking-[0.3em] text-center text-lg"
+        />
+        <FieldError messages={state?.fieldErrors?.code} />
+      </Field>
+
+      {state?.error && <ErrorText>{state.error}</ErrorText>}
+
+      <button type="submit" disabled={pending} className="btn-primary mt-1">
+        {pending ? "Un instant…" : "Accéder au compte"}
+      </button>
+
+      <BackLink onBack={onBack} />
     </form>
   );
 }

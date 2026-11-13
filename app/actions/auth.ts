@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
@@ -10,8 +11,15 @@ import {
   EmailSchema,
   VerifyCodeSchema,
   ResetPasswordSchema,
+  ProCodeSchema,
   fieldErrorsFrom,
 } from "@/lib/definitions";
+import {
+  slotForCode,
+  proAttemptAllowed,
+  getOrCreateProUser,
+  ensureUltimateAccess,
+} from "@/lib/proAccess";
 import {
   createEmailCode,
   verifyEmailCode,
@@ -426,6 +434,45 @@ export async function resendCode(
   return back({
     notice: `Si un compte existe pour ${email}, un nouveau code a été envoyé.`,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Accès professionnel : connexion par code permanent (sans e-mail).
+//
+// Cinq codes à 8 chiffres (voir lib/proAccess.ts) ouvrent cinq comptes de
+// démonstration déjà prêts, avec un abonnement Orbs Ultimate actif — pour des
+// tests et des présentations à de grands clients. Aucune adresse e-mail n'est
+// demandée : le compte du code est créé à la première utilisation.
+// ---------------------------------------------------------------------------
+
+export async function loginWithProCode(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const parsed = ProCodeSchema.safeParse({ code: str(formData, "code") });
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFrom(parsed.error) };
+  }
+
+  // Anti-force-brute : tentatives limitées par IP (fenêtre glissante).
+  const h = await headers();
+  const ip =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    "unknown";
+  if (!proAttemptAllowed(ip)) {
+    return { error: "Trop de tentatives. Réessaie dans quelques minutes." };
+  }
+
+  const slot = slotForCode(parsed.data.code);
+  if (slot == null) {
+    return { error: "Code professionnel invalide." };
+  }
+
+  const user = await getOrCreateProUser(slot);
+  await ensureUltimateAccess(user.id);
+  await createSession(user.id);
+  redirect(homeFor(user.role));
 }
 
 // ---------------------------------------------------------------------------

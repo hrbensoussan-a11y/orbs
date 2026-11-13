@@ -33,6 +33,14 @@ export const VerifyCodeSchema = z.object({
   code: codeField,
 });
 
+/** Saisie d'un code d'accès professionnel (8 chiffres, permanent). */
+export const ProCodeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{8}$/, { error: "Le code professionnel comporte 8 chiffres." }),
+});
+
 /** Réinitialisation du mot de passe : code reçu + nouveau mot de passe. */
 export const ResetPasswordSchema = z.object({
   email: z.email({ error: "Adresse e-mail invalide." }),
