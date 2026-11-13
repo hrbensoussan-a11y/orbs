@@ -7,7 +7,10 @@
 //
 // Ce module est pur (données + fonctions) : il est utilisé côté client
 // (chat, réglages) ET côté serveur (construction du prompt). Aucun accès à
-// localStorage au niveau module — uniquement dans les fonctions, protégées.
+// stockage local au niveau module — uniquement dans les fonctions, protégées,
+// et toujours dans l'espace du compte connecté (lib/userStorage).
+
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export type AiTag = {
   id: string; // le mot après le #, ex. "agenda"
@@ -112,7 +115,7 @@ export const TAG_PREFS_KEY = "orbs.ai.tags";
 
 export function loadTagPrefs(): TagPrefs {
   try {
-    const raw = localStorage.getItem(TAG_PREFS_KEY);
+    const raw = readUserItem(TAG_PREFS_KEY);
     if (raw) {
       const p = JSON.parse(raw);
       const trigger = (TRIGGERS as readonly string[]).includes(p?.trigger) ? p.trigger : "#";
@@ -129,7 +132,7 @@ export function loadTagPrefs(): TagPrefs {
 
 export function saveTagPrefs(prefs: TagPrefs): void {
   try {
-    localStorage.setItem(TAG_PREFS_KEY, JSON.stringify(prefs));
+    writeUserItem(TAG_PREFS_KEY, JSON.stringify(prefs));
   } catch {
     /* ignore */
   }

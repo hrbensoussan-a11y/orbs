@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 const SIZES = { sm: 46, md: 56, lg: 72 } as const;
 type SizeKey = keyof typeof SIZES;
@@ -28,7 +29,7 @@ type Pos = { x: number; y: number };
 
 function loadPrefs(): Prefs {
   try {
-    const raw = localStorage.getItem(PREFS_KEY);
+    const raw = readUserItem(PREFS_KEY);
     if (raw) {
       const p = JSON.parse(raw);
       return {
@@ -81,7 +82,7 @@ export function AiOrb() {
     prefsRef.current = p;
     let initial: Pos | null = null;
     try {
-      const raw = localStorage.getItem(POS_KEY);
+      const raw = readUserItem(POS_KEY);
       if (raw) {
         const j = JSON.parse(raw);
         if (typeof j?.x === "number" && typeof j?.y === "number") initial = j;
@@ -147,7 +148,7 @@ export function AiOrb() {
     draggingRef.current = false;
     if (movedRef.current) {
       try {
-        localStorage.setItem(POS_KEY, JSON.stringify(posRef.current));
+        writeUserItem(POS_KEY, JSON.stringify(posRef.current));
       } catch {
         /* ignore */
       }

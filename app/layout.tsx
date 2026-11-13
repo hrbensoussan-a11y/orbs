@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import { RegisterSW } from "@/components/RegisterSW";
+import { APPEARANCE_INIT } from "@/lib/appearance";
 
 export const metadata: Metadata = {
   title: "Orbs",
@@ -27,9 +28,8 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Applique le thème / fond / luminosité mémorisés avant le premier rendu
-// (évite le flash de couleurs au chargement).
-const APPEARANCE_INIT = `try{var a=JSON.parse(localStorage.getItem('orbs.appearance')||'{}');var r=document.documentElement;if(a.theme)r.setAttribute('data-theme',a.theme);if(a.bg)r.setAttribute('data-bg',a.bg);r.style.setProperty('--dim',String(typeof a.dim==='number'?a.dim:0));if(localStorage.getItem('orbs.motion')==='reduced')r.setAttribute('data-motion','reduced');}catch(e){}`;
+// Le script anti-flash (thème / fond / luminosité du compte actif, appliqués
+// avant le premier rendu) est défini dans lib/appearance.
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

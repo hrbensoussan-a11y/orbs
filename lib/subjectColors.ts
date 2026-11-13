@@ -8,6 +8,7 @@
 // Stockage : localStorage "orbs.subjectColors" = { "Maths": "#ef4444", … }.
 
 import { SUBJECT_TONE } from "@/lib/learn/types";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export const SUBJECT_PALETTE: { name: string; hex: string }[] = [
   { name: "Rouge", hex: "#ef4444" },
@@ -39,7 +40,7 @@ export function defaultSubjectColor(subject: string): string {
 
 export function loadSubjectColors(): Record<string, string> {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = readUserItem(KEY);
     if (raw) {
       const o = JSON.parse(raw);
       if (o && typeof o === "object") return o;
@@ -52,7 +53,7 @@ export function loadSubjectColors(): Record<string, string> {
 
 export function saveSubjectColors(map: Record<string, string>): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(map));
+    writeUserItem(KEY, JSON.stringify(map));
   } catch {
     /* ignore */
   }

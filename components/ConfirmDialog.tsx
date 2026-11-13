@@ -22,6 +22,7 @@ export function ConfirmDialog({
   icon,
   onConfirm,
   onCancel,
+  onDismiss,
 }: {
   open: boolean;
   title: string;
@@ -32,8 +33,15 @@ export function ConfirmDialog({
   icon?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
+  /**
+   * Fermeture SANS réponse (touche Échap, clic hors de la fenêtre). Par
+   * défaut c'est un « Non » ; à fournir quand « Non » est une vraie décision
+   * qu'on ne veut pas enregistrer sur un geste accidentel.
+   */
+  onDismiss?: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dismiss = onDismiss ?? onCancel;
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +49,7 @@ export function ConfirmDialog({
     cancelRef.current?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") dismiss();
     };
     window.addEventListener("keydown", onKey);
 
@@ -52,7 +60,7 @@ export function ConfirmDialog({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onCancel]);
+  }, [open, dismiss]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -65,7 +73,7 @@ export function ConfirmDialog({
       className="fixed inset-0 z-50 grid place-items-center p-4"
       style={{ background: "rgba(31,41,68,.32)" }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        if (e.target === e.currentTarget) dismiss();
       }}
       role="dialog"
       aria-modal="true"

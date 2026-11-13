@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Palette, X } from "lucide-react";
-
-export const APPEARANCE_KEY = "orbs.appearance";
-
-type Appearance = { theme: string; bg: string; dim: number };
+import {
+  applyAppearance as apply,
+  readAppearance as read,
+  saveAppearance,
+  type Appearance,
+} from "@/lib/appearance";
 
 const THEMES: [string, string][] = [
   ["light", "Clair"],
@@ -19,26 +21,6 @@ const BGS: [string, string, string][] = [
   ["ocean", "Océan", "linear-gradient(135deg,#cfe6ff,#d2f0f4,#dbe7ff)"],
   ["plain", "Uni", "linear-gradient(135deg,#eef1f5,#eef2f7)"],
 ];
-
-function read(): Appearance {
-  if (typeof window === "undefined") return { theme: "light", bg: "rainbow", dim: 0 };
-  try {
-    const o = JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "{}");
-    return {
-      theme: o.theme || "light",
-      bg: o.bg || "rainbow",
-      dim: typeof o.dim === "number" ? o.dim : 0,
-    };
-  } catch {
-    return { theme: "light", bg: "rainbow", dim: 0 };
-  }
-}
-function apply(a: Appearance) {
-  const r = document.documentElement;
-  r.setAttribute("data-theme", a.theme);
-  r.setAttribute("data-bg", a.bg);
-  r.style.setProperty("--dim", String(a.dim));
-}
 
 export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row" }) {
   const [open, setOpen] = useState(false);
@@ -66,9 +48,7 @@ export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row
     setAp((prev) => {
       const next = { ...prev, ...patch };
       apply(next);
-      try {
-        localStorage.setItem(APPEARANCE_KEY, JSON.stringify(next));
-      } catch {}
+      saveAppearance(next);
       return next;
     });
   }

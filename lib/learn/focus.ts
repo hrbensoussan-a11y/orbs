@@ -10,6 +10,7 @@
 
 import { load, save } from "./store";
 import { award, recomputeBadges, dateKey } from "./progress";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export type FocusPhase = "work" | "break";
 
@@ -47,7 +48,7 @@ export function defaultFocus(): FocusState {
 export function loadFocus(): FocusState {
   const base = defaultFocus();
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = readUserItem(KEY);
     if (!raw) return base;
     const r = JSON.parse(raw);
     if (!r || typeof r !== "object") return base;
@@ -78,7 +79,7 @@ export function loadFocus(): FocusState {
 
 export function saveFocus(s: FocusState): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    writeUserItem(KEY, JSON.stringify(s));
   } catch {
     /* indisponible */
   }

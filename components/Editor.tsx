@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, X, ChevronRight, ChevronDown } from "lucide-react";
 import { MoodPicker } from "./MoodPicker";
+import { readUserItem, writeUserItem, removeUserItem } from "@/lib/userStorage";
 
 export type EditorEntry = {
   id: string | null;
@@ -137,7 +138,7 @@ export function Editor({
         idRef.current = entry.id;
         window.history.replaceState(null, "", `/write/${entry.id}`);
         try {
-          localStorage.removeItem(DRAFT_KEY);
+          removeUserItem(DRAFT_KEY);
         } catch {}
       } else {
         const res = await fetch(`/api/entries/${idRef.current}`, {
@@ -181,7 +182,7 @@ export function Editor({
     // Restaure un éventuel brouillon local (nouvelle entrée non encore créée).
     if (!initial.id && !initial.content && !initial.title) {
       try {
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = readUserItem(DRAFT_KEY);
         if (raw) {
           const d = JSON.parse(raw);
           if (typeof d.content === "string" && d.content.trim()) {
@@ -201,7 +202,7 @@ export function Editor({
     // Sauvegarde locale immédiate d'un brouillon non encore persisté.
     if (!idRef.current) {
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content }));
+        writeUserItem(DRAFT_KEY, JSON.stringify({ title, content }));
       } catch {}
     }
     scheduleSave();

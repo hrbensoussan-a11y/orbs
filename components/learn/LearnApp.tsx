@@ -32,6 +32,7 @@ import {
   listDecks,
   deleteDeck,
   toggleFav,
+  isPristine,
 } from "@/lib/learn/store";
 import { deckProgress, dueCount } from "@/lib/learn/sm2";
 import { dueTotal } from "@/lib/learn/review";
@@ -58,6 +59,7 @@ import { StudySession } from "./StudySession";
 import { DailyReview } from "./DailyReview";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FOCUS_OPEN_EVENT } from "@/lib/learn/focus";
+import { getActiveUser, readUserItem, writeUserItem } from "@/lib/userStorage";
 
 /** Ouvre la fenêtre de concentration (minuteur global monté dans le layout). */
 function openFocus() {
@@ -76,10 +78,17 @@ type View =
   | { name: "study"; deckId: string; mode: Mode };
 
 // Envoie un résumé (compteurs seulement) à l'espace famille, sans bloquer.
+// L'envoi est différé : on retient pour quel compte il a été préparé et on
+// l'abandonne si ce n'est plus le compte actif à l'échéance (déconnexion ou
+// changement de compte entre-temps), pour ne jamais publier la progression
+// d'un compte dans l'espace famille d'un autre.
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleSync(delay: number, s: State) {
   if (syncTimer) clearTimeout(syncTimer);
+  const owner = getActiveUser();
+  if (!owner) return;
   syncTimer = setTimeout(() => {
+    if (getActiveUser() !== owner) return;
     syncLearnSummary(summarize(s)).catch(() => {});
   }, delay);
 }
@@ -94,7 +103,9 @@ export function LearnApp() {
     const s = load();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(s);
-    scheduleSync(500, s);
+    // Un espace jamais utilisé sur cet appareil n'a rien à publier : on ne
+    // remplace pas la progression connue du serveur par des zéros.
+    if (!isPristine(s)) scheduleSync(500, s);
   }, []);
 
   const save = useCallback(() => {
@@ -291,7 +302,7 @@ function Home({
   const [folded, setFolded] = useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(LEARN_UI_KEY);
+      const raw = readUserItem(LEARN_UI_KEY);
       if (raw) {
         const o = JSON.parse(raw);
         /* eslint-disable react-hooks/set-state-in-effect */
@@ -305,7 +316,7 @@ function Home({
   }, []);
   function persistUi(nextSort: SortKey, nextFold: Record<string, boolean>) {
     try {
-      localStorage.setItem(LEARN_UI_KEY, JSON.stringify({ sort: nextSort, fold: nextFold }));
+      writeUserItem(LEARN_UI_KEY, JSON.stringify({ sort: nextSort, fold: nextFold }));
     } catch {
       /* ignore */
     }

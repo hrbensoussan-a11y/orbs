@@ -1,5 +1,8 @@
 // Agenda (devoirs + emploi du temps) — stockage local, comme « Apprendre ».
-// Une seule clé localStorage ; rien n'est envoyé au serveur.
+// Une seule clé, dans l'espace local du compte connecté (lib/userStorage) ;
+// rien n'est envoyé au serveur.
+
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export type Homework = {
   id: string;
@@ -91,7 +94,7 @@ export function heal(raw: unknown): AgendaState {
 export function loadAgenda(): AgendaState {
   if (typeof window === "undefined") return emptyAgenda();
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = readUserItem(KEY);
     if (!raw) return emptyAgenda();
     return heal(JSON.parse(raw));
   } catch {
@@ -102,7 +105,7 @@ export function loadAgenda(): AgendaState {
 export function saveAgenda(state: AgendaState): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(state));
+    writeUserItem(KEY, JSON.stringify(state));
   } catch {
     /* quota / mode privé : on ignore */
   }

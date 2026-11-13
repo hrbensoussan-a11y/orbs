@@ -6,7 +6,8 @@
 //   - « Discussions » : des conversations libres (comme un chat normal).
 //   - « Matières » : une discussion par matière (l'IA sait la matière).
 // À droite : le chat de la discussion sélectionnée.
-// Tout est en localStorage ("orbs.ai.v2"). Parle au backend /api/ai/chat.
+// Tout est dans l'espace local du compte connecté ("orbs.ai.v2", voir
+// lib/userStorage). Parle au backend /api/ai/chat.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -51,6 +52,7 @@ import {
   normalizeTag,
   extractTags,
 } from "@/lib/ai/tags";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 type Ghost = { id: string; rest: string; start: number } | null;
 type Threads = Record<string, ChatMessage[]>;
@@ -107,7 +109,7 @@ function newId(): string {
 
 function loadStore(): { threads: Threads; convs: Conv[] } {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = readUserItem(STORE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
       return {
@@ -202,13 +204,13 @@ export function AiChat({
       // repliée par défaut sur téléphone et tablette portrait (où elle s'ouvre
       // en tiroir par-dessus le chat) pour laisser toute la largeur à la
       // conversation ; ouverte par défaut sur grand écran (≥ 900px).
-      const panelPref = localStorage.getItem(PANEL_KEY);
+      const panelPref = readUserItem(PANEL_KEY);
       if (panelPref === "0") setShowPanel(false);
       else if (panelPref === null && window.innerWidth < 900) setShowPanel(false);
-      const v = localStorage.getItem(VOICE_KEY);
+      const v = readUserItem(VOICE_KEY);
       if (v) setVoiceState(toVoiceId(v));
-      if (localStorage.getItem(AUTOPLAY_KEY) === "0") setAutoplayState(false);
-      const m = localStorage.getItem(MODE_KEY);
+      if (readUserItem(AUTOPLAY_KEY) === "0") setAutoplayState(false);
+      const m = readUserItem(MODE_KEY);
       if (m) setModeState(toModeId(m));
     } catch {
       /* indisponible */
@@ -219,7 +221,7 @@ export function AiChat({
   function setVoice(v: VoiceId) {
     setVoiceState(v);
     try {
-      localStorage.setItem(VOICE_KEY, v);
+      writeUserItem(VOICE_KEY, v);
     } catch {
       /* indisponible */
     }
@@ -227,7 +229,7 @@ export function AiChat({
   function setAutoplay(v: boolean) {
     setAutoplayState(v);
     try {
-      localStorage.setItem(AUTOPLAY_KEY, v ? "1" : "0");
+      writeUserItem(AUTOPLAY_KEY, v ? "1" : "0");
     } catch {
       /* indisponible */
     }
@@ -237,7 +239,7 @@ export function AiChat({
   function setMode(m: AiModeId) {
     setModeState(m);
     try {
-      localStorage.setItem(MODE_KEY, m);
+      writeUserItem(MODE_KEY, m);
     } catch {
       /* indisponible */
     }
@@ -246,7 +248,7 @@ export function AiChat({
   function togglePanel() {
     setShowPanel((v) => {
       try {
-        localStorage.setItem(PANEL_KEY, v ? "0" : "1");
+        writeUserItem(PANEL_KEY, v ? "0" : "1");
       } catch {
         /* indisponible */
       }
@@ -256,7 +258,7 @@ export function AiChat({
 
   const persist = useCallback((t: Threads, c: Conv[]) => {
     try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ version: 3, threads: t, convs: c }));
+      writeUserItem(STORE_KEY, JSON.stringify({ version: 3, threads: t, convs: c }));
     } catch {
       /* quota plein / mode privé */
     }

@@ -13,7 +13,9 @@ import {
 
 export async function createSession(userId: string): Promise<void> {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-  const token = await encrypt({ userId, expiresAt: expiresAt.toISOString() });
+  // `scoped` : session ouverte avec le cloisonnement des données locales en
+  // place (les sessions antérieures ne portent pas ce marqueur).
+  const token = await encrypt({ userId, expiresAt: expiresAt.toISOString(), scoped: true });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,

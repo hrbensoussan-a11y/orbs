@@ -2,6 +2,7 @@
 // mutation, « healing » au chargement. Aucun serveur.
 import type { Card, Deck, Kind, State } from "./types";
 import { KIND_META } from "./types";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export const STORAGE_KEY = "orbs.learn.v1";
 const VERSION = 1;
@@ -21,6 +22,25 @@ export function defaultState(): State {
       journal: {},
     },
   };
+}
+
+/**
+ * Vrai si l'espace Apprendre de ce compte n'a encore jamais servi sur cet
+ * appareil (aucun paquet, aucune activité). Un tel état ne doit pas être
+ * publié vers l'espace famille : il écraserait la progression réelle par des
+ * zéros (appareil neuf, ou données locales pas encore rattachées au compte).
+ */
+export function isPristine(state: State): boolean {
+  const st = state.stats;
+  return (
+    Object.keys(state.decks).length === 0 &&
+    st.xp === 0 &&
+    st.streak === 0 &&
+    st.reviews === 0 &&
+    st.focus === 0 &&
+    st.badges.length === 0 &&
+    Object.keys(st.journal).length === 0
+  );
 }
 
 export function uid(prefix = "id"): string {
@@ -107,7 +127,7 @@ function sanitizeJournal(j: Record<string, unknown>): Record<string, number> {
 export function load(): State {
   if (typeof window === "undefined") return defaultState();
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readUserItem(STORAGE_KEY);
     if (!raw) return defaultState();
     return heal(JSON.parse(raw));
   } catch {
@@ -118,7 +138,7 @@ export function load(): State {
 export function save(state: State): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    writeUserItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // quota / mode privé : on ignore silencieusement
   }

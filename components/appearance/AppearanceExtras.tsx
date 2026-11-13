@@ -1,6 +1,6 @@
 "use client";
 
-// Réglages d'apparence complémentaires, côté client (localStorage) :
+// Réglages d'apparence complémentaires, côté client (espace local du compte) :
 // - Réduire les animations (accessibilité / confort / vieux téléphones).
 // - Réinitialiser l'apparence (thème, fond, luminosité, animations) — action
 //   qui change beaucoup de choses d'un coup, donc protégée par une
@@ -12,31 +12,20 @@
 import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-
-const MOTION_KEY = "orbs.motion";
-const APPEARANCE_KEY = "orbs.appearance";
+import { clearAppearance, readReducedMotion, saveReducedMotion } from "@/lib/appearance";
 
 export function AppearanceExtras() {
   const [reduced, setReduced] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
-    try {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setReduced(localStorage.getItem(MOTION_KEY) === "reduced");
-    } catch {
-      /* localStorage indisponible : valeur par défaut */
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReduced(readReducedMotion());
   }, []);
 
   function changeMotion(next: boolean) {
     setReduced(next);
-    try {
-      if (next) localStorage.setItem(MOTION_KEY, "reduced");
-      else localStorage.removeItem(MOTION_KEY);
-    } catch {
-      /* ignore */
-    }
+    saveReducedMotion(next);
     document.documentElement.setAttribute(
       "data-motion",
       next ? "reduced" : "full",
@@ -44,12 +33,7 @@ export function AppearanceExtras() {
   }
 
   function doReset() {
-    try {
-      localStorage.removeItem(APPEARANCE_KEY);
-      localStorage.removeItem(MOTION_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearAppearance();
     // On recharge pour réappliquer proprement les réglages de départ partout
     // (le script d'init du layout s'en charge au chargement).
     window.location.reload();

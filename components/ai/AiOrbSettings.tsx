@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 const PREFS_KEY = "orbs.aiorb.prefs";
 
@@ -43,7 +44,7 @@ export function AiOrbSettings() {
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PREFS_KEY);
+      const raw = readUserItem(PREFS_KEY);
       if (raw) {
         const p = JSON.parse(raw);
         /* eslint-disable react-hooks/set-state-in-effect */
@@ -59,7 +60,7 @@ export function AiOrbSettings() {
 
   function persist(nextShow: boolean, nextSize: SizeKey, nextStyle: StyleKey) {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ hidden: !nextShow, size: nextSize, style: nextStyle }));
+      writeUserItem(PREFS_KEY, JSON.stringify({ hidden: !nextShow, size: nextSize, style: nextStyle }));
     } catch {
       /* ignore */
     }

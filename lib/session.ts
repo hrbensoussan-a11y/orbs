@@ -11,6 +11,12 @@ export const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
 export type SessionPayload = {
   userId: string;
   expiresAt: string; // ISO
+  /**
+   * `true` pour une session ouverte depuis que les données locales sont
+   * cloisonnées par compte. Absent : la session date d'avant — l'élève était
+   * déjà connecté au moment de la mise à jour (voir lib/legacyStorage).
+   */
+  scoped?: boolean;
 };
 
 const secret = process.env.SESSION_SECRET;
@@ -42,6 +48,7 @@ export async function decrypt(
     return {
       userId: payload.userId,
       expiresAt: String(payload.expiresAt ?? ""),
+      scoped: payload.scoped === true,
     };
   } catch {
     // Signature invalide ou token expiré.

@@ -1,6 +1,8 @@
 // Notes & moyennes — saisies à la main par l'élève, stockage local.
 // Rien n'est envoyé au serveur.
 
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
+
 export type Grade = {
   id: string;
   subject: string;
@@ -64,7 +66,7 @@ export function heal(raw: unknown): GradesState {
 export function loadGrades(): GradesState {
   if (typeof window === "undefined") return emptyGrades();
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = readUserItem(KEY);
     if (!raw) return emptyGrades();
     return heal(JSON.parse(raw));
   } catch {
@@ -75,7 +77,7 @@ export function loadGrades(): GradesState {
 export function saveGrades(state: GradesState): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(state));
+    writeUserItem(KEY, JSON.stringify(state));
   } catch {
     /* ignore */
   }

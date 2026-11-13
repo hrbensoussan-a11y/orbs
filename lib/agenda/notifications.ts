@@ -8,6 +8,7 @@
 
 import { dateKey, mondayIndex, type AgendaState } from "@/lib/agenda/store";
 import { playRingtone, DEFAULT_RINGTONE, type RingtoneId } from "@/lib/sound/ringtones";
+import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 export type NotifSettings = {
   enabled: boolean; // interrupteur général
@@ -47,7 +48,7 @@ export function loadNotifSettings(): NotifSettings {
   const d = defaultNotifSettings();
   if (typeof window === "undefined") return d;
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = readUserItem(KEY);
     if (!raw) return d;
     const o = JSON.parse(raw) as Partial<NotifSettings>;
     return {
@@ -67,7 +68,7 @@ export function loadNotifSettings(): NotifSettings {
 export function saveNotifSettings(s: NotifSettings): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(s));
+    writeUserItem(KEY, JSON.stringify(s));
     window.dispatchEvent(new Event(NOTIF_EVENT));
   } catch {
     /* quota / mode privé : on ignore */
@@ -132,7 +133,7 @@ function loadFired(): FiredLog {
   const today = dateKey();
   if (typeof window === "undefined") return { day: today, keys: [] };
   try {
-    const raw = window.localStorage.getItem(FIRED_KEY);
+    const raw = readUserItem(FIRED_KEY);
     const o = raw ? (JSON.parse(raw) as Partial<FiredLog>) : null;
     if (!o || o.day !== today || !Array.isArray(o.keys)) return { day: today, keys: [] };
     return { day: today, keys: o.keys.filter((k) => typeof k === "string") };
@@ -144,7 +145,7 @@ function loadFired(): FiredLog {
 function saveFired(log: FiredLog): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(FIRED_KEY, JSON.stringify(log));
+    writeUserItem(FIRED_KEY, JSON.stringify(log));
   } catch {
     /* ignore */
   }
