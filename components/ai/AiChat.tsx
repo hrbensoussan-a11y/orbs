@@ -139,6 +139,10 @@ export function AiChat({
   // `true` quand l'erreur est liée aux crédits / à l'offre (on propose un lien).
   const [errorUpgrade, setErrorUpgrade] = useState(false);
   const [retry, setRetry] = useState<{ text: string; action: QuickAction | null } | null>(null);
+  // Clé API absente : l'interface reste entièrement utilisable (modes, champ de
+  // saisie, suggestions) ; SEUL l'envoi est désactivé. Ce drapeau affiche alors
+  // le rappel juste au-dessus du composeur.
+  const [sendBlocked, setSendBlocked] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [tagPrefs, setTagPrefs] = useState<TagPrefs>({ trigger: "#", favorites: [] });
@@ -361,6 +365,7 @@ export function AiChat({
     setSel(s);
     setError(null);
     setRetry(null);
+    setSendBlocked(false);
     setInput("");
     setPendingAction(null);
     setGhost(null);
@@ -413,7 +418,15 @@ export function AiChat({
     opts?: { viaVoice?: boolean },
   ) {
     const clean = text.trim();
-    if (!clean || loading || !configured) return;
+    if (!clean || loading) return;
+    // Sans clé API côté serveur : on NE part PAS vers /api/ai/chat (aucun appel
+    // réseau, aucun crédit). On garde le texte saisi et on affiche un rappel,
+    // pour que l'interface reste testable de bout en bout.
+    if (!configured) {
+      setSendBlocked(true);
+      inputRef.current?.focus();
+      return;
+    }
     // Aucune discussion ouverte (accueil IA) : on en crée une à la volée.
     let tgt = sel;
     let base = messages;
@@ -565,6 +578,7 @@ export function AiChat({
   function onQuickAction(a: { action: QuickAction; starter: string }) {
     setInput(a.starter);
     setPendingAction(a.action);
+    setSendBlocked(false);
     inputRef.current?.focus();
   }
   // Suggestion de l'accueil : pré-remplit le champ (fonctionne même sans
@@ -572,6 +586,7 @@ export function AiChat({
   function onHomeSuggestion(s: { starter: string; action: QuickAction | null }) {
     setInput(s.starter);
     setPendingAction(s.action);
+    setSendBlocked(false);
     setTimeout(() => inputRef.current?.focus(), 20);
   }
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -781,7 +796,7 @@ export function AiChat({
 
           {!configured && (
             <div className="card p-4 mb-3 text-sm text-ink-2" style={{ background: "color-mix(in srgb, var(--amber) 12%, var(--glass))" }} role="status">
-              <strong className="text-ink">IA non configurée.</strong> L’assistant sera disponible dès que la clé API aura été ajoutée côté serveur.
+              <strong className="text-ink">IA non configurée.</strong> Tu peux déjà parcourir l’interface : choisir le mode, écrire, utiliser les suggestions. Seul l’envoi est désactivé, le temps que la clé API soit ajoutée côté serveur.
             </div>
           )}
 
@@ -801,9 +816,8 @@ export function AiChat({
                     <button
                       key={s.label}
                       onClick={() => onHomeSuggestion(s)}
-                      disabled={!configured}
-                      className="card flex items-center gap-3 px-4 py-3.5 text-left hover:shadow-[var(--shadow-float)] transition-shadow disabled:opacity-55"
-                      style={{ cursor: configured ? "pointer" : "default" }}
+                      className="card flex items-center gap-3 px-4 py-3.5 text-left hover:shadow-[var(--shadow-float)] transition-shadow"
+                      style={{ cursor: "pointer" }}
                     >
                       <span className={`icon-chip ${s.tone} flex-none`} style={{ width: 38, height: 38 }} aria-hidden>
                         <Icon size={19} />
@@ -829,7 +843,7 @@ export function AiChat({
                     )}
                     <div className="flex flex-wrap justify-center gap-2 mt-1">
                       {QUICK_ACTIONS.map((a) => (
-                        <button key={a.action} className="chip hover:shadow-[var(--shadow-soft)] transition-shadow" style={{ cursor: "pointer" }} onClick={() => onQuickAction(a)} disabled={!configured}>
+                        <button key={a.action} className="chip hover:shadow-[var(--shadow-soft)] transition-shadow" style={{ cursor: "pointer" }} onClick={() => onQuickAction(a)}>
                           {a.label}
                         </button>
                       ))}
@@ -931,6 +945,16 @@ export function AiChat({
                     </span>
                   </div>
                 )}
+                {sendBlocked && (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" style={{ background: "color-mix(in srgb, var(--amber) 16%, transparent)", color: "var(--ink)" }} role="status">
+                      Envoi désactivé : l’IA n’est pas encore configurée. Ton message reste écrit.
+                      <button className="ml-1.5 text-ink-3 hover:text-ink-2" onClick={() => setSendBlocked(false)} aria-label="Fermer">
+                        <X size={12} aria-hidden />
+                      </button>
+                    </span>
+                  </div>
+                )}
                 {speech.error ? (
                   <div className="mb-1 flex justify-start">
                     <span className="chip" style={{ background: "color-mix(in srgb, var(--coral) 14%, transparent)", color: "var(--ink)" }} role="alert">
@@ -954,7 +978,7 @@ export function AiChat({
                   </div>
                 ) : null}
                 <div className="mb-1.5 flex items-center">
-                  <ModeSelector mode={mode} onMode={setMode} disabled={!configured} />
+                  <ModeSelector mode={mode} onMode={setMode} disabled={loading} />
                 </div>
                 <div className="glass-strong flex items-end gap-2 p-2 !rounded-[22px]">
                   <div className="relative flex-1 self-stretch">
@@ -968,11 +992,12 @@ export function AiChat({
                       ref={inputRef}
                       className="ai-ta"
                       rows={1}
-                      placeholder={configured ? "Pose ta question…" : "IA non configurée"}
+                      placeholder="Pose ta question…"
                       value={input}
-                      disabled={!configured || loading}
+                      disabled={loading}
                       onChange={(e) => {
                         suppressGhostRef.current = false;
+                        setSendBlocked(false);
                         setInput(e.target.value);
                         refreshGhost(e.target.value, e.target.selectionStart ?? e.target.value.length);
                       }}
@@ -988,12 +1013,20 @@ export function AiChat({
                   {speech.supported && (
                     <button
                       type="button"
-                      className={`btn-ghost !px-3.5 !py-2.5 !rounded-[16px] flex-none${speech.recording ? " voice-rec" : ""}`}
+                      className={`btn-ghost !px-3.5 !py-2.5 !rounded-[16px] flex-none disabled:opacity-50${speech.recording ? " voice-rec" : ""}`}
                       onClick={onMic}
+                      // Le micro, lui, reste désactivé sans clé : la transcription
+                      // passe obligatoirement par le serveur (appel réel).
                       disabled={!configured || loading || speech.transcribing}
                       aria-label={speech.recording ? "Arrêter et envoyer" : "Parler à l'assistant"}
                       aria-pressed={speech.recording}
-                      title={speech.recording ? "Arrêter et envoyer" : "Parler"}
+                      title={
+                        !configured
+                          ? "Micro indisponible tant que l’IA n’est pas configurée"
+                          : speech.recording
+                            ? "Arrêter et envoyer"
+                            : "Parler"
+                      }
                     >
                       {speech.transcribing ? (
                         <Loader2 size={18} aria-hidden className="voice-spin" />
@@ -1007,7 +1040,7 @@ export function AiChat({
                       <Square size={16} aria-hidden fill="currentColor" />
                     </button>
                   ) : (
-                    <button className="btn-primary !px-3.5 !py-2.5 !rounded-[16px] flex-none" onClick={() => send(input, pendingAction)} disabled={!configured || !input.trim()} aria-label="Envoyer">
+                    <button className="btn-primary !px-3.5 !py-2.5 !rounded-[16px] flex-none" onClick={() => send(input, pendingAction)} disabled={!input.trim()} aria-label="Envoyer">
                       <Send size={18} aria-hidden />
                     </button>
                   )}
