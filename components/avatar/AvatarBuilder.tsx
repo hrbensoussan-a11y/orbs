@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Shuffle, X, Check } from "lucide-react";
 import { Avatar } from "./Avatar";
@@ -27,6 +28,10 @@ import {
 } from "@/lib/avatar/config";
 
 type CatId = keyof AvatarConfig;
+
+// Grille des vignettes : 4 colonnes sur téléphone, puis plus serrée dès que la
+// largeur le permet (la colonne du panneau est plafonnée à 720px).
+const GRID = "grid grid-cols-4 min-[520px]:grid-cols-5 min-[680px]:grid-cols-6 gap-3";
 
 const CATS: { id: CatId; label: string; options: Option[] }[] = [
   { id: "body", label: "Silhouette", options: BODIES },
@@ -68,11 +73,39 @@ export function AvatarBuilder({
     });
   }
 
-  return (
+  // Échap pour fermer + page figée derrière le panneau (même comportement que
+  // les autres fenêtres du projet, voir ConfirmDialog).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  // Rendu via un portail sur <body> : INDISPENSABLE. Le panneau est ouvert
+  // depuis une carte (.card), et les cartes ont un backdrop-filter, ce qui en
+  // fait le bloc conteneur de leurs enfants position:fixed. Sans portail, le
+  // plein écran se réduisait à la taille de la carte du profil (926 × 287 px
+  // sur un écran 1920) : les options débordaient et le reste de la page
+  // transparaissait au travers.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "var(--canvas)" }}>
       {/* Fond vivant discret déjà géré par body ; on pose un voile doux */}
       <div className="absolute inset-0 -z-10" style={{ background: "var(--veil)" }} aria-hidden />
 
+      {/* Colonne centrée : le panneau occupe tout l'écran, mais son contenu
+          reste dans une largeur de lecture confortable et centrée, comme le
+          reste de l'application. Sans ce plafond, les options s'étalaient sur
+          toute la largeur d'un écran de bureau (colonnes à 480px d'écart). */}
+      <div className="w-full mx-auto flex-1 min-h-0 flex flex-col" style={{ maxWidth: 720 }}>
       {/* En-tête */}
       <header
         className="flex items-center justify-between px-4 shrink-0"
@@ -105,9 +138,12 @@ export function AvatarBuilder({
         </button>
       </div>
 
-      {/* Onglets de catégories */}
-      <div className="shrink-0 overflow-x-auto no-scrollbar px-3">
-        <div className="flex gap-2 w-max pb-1">
+      {/* Onglets de catégories — défilement horizontal sur téléphone (faute de
+          place), mais repliés sur plusieurs lignes dès 680px : sinon les
+          dernières catégories (Barbe, Lunettes…) restaient coupées à droite
+          alors que la place ne manque pas. */}
+      <div className="shrink-0 overflow-x-auto no-scrollbar px-3 min-[680px]:overflow-x-visible">
+        <div className="flex gap-2 w-max pb-1 min-[680px]:w-full min-[680px]:flex-wrap min-[680px]:justify-center">
           {CATS.map((c) => (
             <button
               key={c.id}
@@ -147,7 +183,7 @@ export function AvatarBuilder({
         )}
 
         {cat === "bg" ? (
-          <div className="grid grid-cols-4 gap-3">
+          <div className={GRID}>
             {BGS.map((b) => {
               const on = cfg.bg === b.id;
               const bgStyle =
@@ -170,7 +206,7 @@ export function AvatarBuilder({
             })}
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-3">
+          <div className={GRID}>
             {active.options.map((o) => {
               const on = cfg[cat] === o.id;
               const preview = { ...cfg, [cat]: o.id } as AvatarConfig;
@@ -199,7 +235,9 @@ export function AvatarBuilder({
           <Check size={18} aria-hidden /> {pending ? "Enregistrement…" : "Enregistrer mon avatar"}
         </button>
       </footer>
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
