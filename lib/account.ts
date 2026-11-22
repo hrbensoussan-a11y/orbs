@@ -114,10 +114,11 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
       challengesToDo: { include: { from: { select: { name: true, firstName: true, email: true } } } },
       subscription: true,
       wallet: true,
-      ledger: { orderBy: { createdAt: "desc" }, take: 5000 },
     },
   });
   if (!user) throw new Error("Utilisateur introuvable.");
+  // Historique des crédits COMPLET (aucune limite arbitraire), lu par pages.
+  const ledger = await readFullCreditLedger(userId);
 
   const pro = isProAccountEmail(user.email);
   const type: AccountExport["compte"]["type"] = pro
@@ -274,14 +275,84 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
           finCycle: user.wallet.cycleEnd?.toISOString() ?? null,
         }
       : null,
-    mouvementsCredits: user.ledger.map((l) => ({
+    mouvementsCredits: ledger.map((l) => ({
       variation: l.delta,
       soldeApres: l.balanceAfter,
       raison: l.reason,
       moteur: l.engine,
+      // Détails enregistrés par le serveur (offre, modèle, mode…) : jamais de
+      // contenu de conversation ni de secret, uniquement la nature de l'usage.
+      details: parseLedgerMeta(l.meta),
       date: l.createdAt.toISOString(),
     })),
   };
+}
+
+/** Taille d'une page de lecture de l'historique des crédits. */
+export const LEDGER_EXPORT_PAGE_SIZE = 2000;
+
+type LedgerRow = {
+  id: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string;
+  engine: string | null;
+  meta: string | null;
+  createdAt: Date;
+};
+
+/**
+ * TOUT l'historique des crédits de `userId`, du plus récent au plus ancien,
+ * lu par pages de LEDGER_EXPORT_PAGE_SIZE (pagination « keyset » sur
+ * l'index (userId, createdAt) : chaque page coûte autant que la première,
+ * même après des centaines de milliers de lignes). Le filtre `userId`
+ * figure dans CHAQUE requête : aucune page ne peut contenir une ligne d'un
+ * autre compte. L'ordre (createdAt, id) est total : ni doublon ni oubli,
+ * même pour des mouvements enregistrés à la même milliseconde.
+ */
+export async function readFullCreditLedger(
+  userId: string,
+  pageSize = LEDGER_EXPORT_PAGE_SIZE,
+): Promise<LedgerRow[]> {
+  const select = {
+    id: true,
+    delta: true,
+    balanceAfter: true,
+    reason: true,
+    engine: true,
+    meta: true,
+    createdAt: true,
+  } as const;
+  const all: LedgerRow[] = [];
+  let last: LedgerRow | undefined;
+  for (;;) {
+    const page: LedgerRow[] = await prisma.creditLedger.findMany({
+      where: last
+        ? {
+            userId,
+            OR: [
+              { createdAt: { lt: last.createdAt } },
+              { createdAt: last.createdAt, id: { lt: last.id } },
+            ],
+          }
+        : { userId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: pageSize,
+      select,
+    });
+    all.push(...page);
+    if (page.length < pageSize) return all;
+    last = page[page.length - 1];
+  }
+}
+
+function parseLedgerMeta(meta: string | null): unknown {
+  if (meta == null) return null;
+  try {
+    return JSON.parse(meta);
+  } catch {
+    return meta;
+  }
 }
 
 // ---------------------------------------------------------------------------

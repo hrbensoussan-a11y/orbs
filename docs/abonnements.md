@@ -203,3 +203,70 @@ transaction. Idéal pour vérifier la logique de crédits et d'UI.
 | `app/actions/billing.ts` | Server actions : Checkout, Portail, changement d'offre, résiliation. |
 | `app/(app)/abonnement/page.tsx` | Comparaison des offres + gestion + jauge de crédits. |
 | Routes `app/api/ai/*` | Intégration : droits de l'offre + débit du portefeuille. |
+
+## 7. Suppression de compte et Stripe — à revoir AVANT l'activation
+
+Audit du centre de compte (22/11/2026). **État constaté :** aucune variable
+`STRIPE_*` n'est définie ; aucun compte Stripe n'existe. Conséquences :
+
+- `startCheckout` ne crée **jamais** de session Checkout : en développement, il
+  **simule** l'abonnement (aucune référence Stripe enregistrée) ; en production,
+  il refuse avec « Les paiements ne sont pas encore configurés ».
+- Les comptes sans référence Stripe (simulation, codes professionnels) sont
+  supprimables sans aucun appel à Stripe ; un compte qui porterait des
+  références Stripe serait **bloqué** (« vérification momentanément impossible »).
+- Aucun paiement réel n'a jamais pu avoir lieu : les risques ci-dessous sont
+  **futurs**, ils ne s'appliquent pas à l'environnement actuel.
+
+Déjà en place : avant toute suppression, `lib/accountStripeCheck.ts` interroge
+Stripe **en lecture seule** (abonnement, client, liste de TOUS ses abonnements)
+et bloque au moindre doute. Il ne voit pas les sessions Checkout.
+
+### R1 — Session Checkout encore ouverte après la suppression (abonnement orphelin)
+
+1. L'élève ouvre la page de paiement Stripe (session valable 24 h par défaut),
+   ne paie pas tout de suite.
+2. Il supprime son compte Orbs : la vérification passe (le client Stripe
+   n'a encore aucun abonnement).
+3. Il revient sur l'onglet Stripe et paie : Stripe crée un abonnement
+   **facturé chaque mois**.
+4. Le webhook `checkout.session.completed` vise un compte qui n'existe plus :
+   l'écriture échoue (clé étrangère), la route répond 500, Stripe réessaie
+   pendant environ 3 jours puis abandonne. **L'abonnement continue d'être
+   facturé, sans compte Orbs associé.**
+
+**Solution proposée (à valider avant toute implémentation) :**
+
+1. *Lecture* — dans `checkStripeBeforeDeletion`, lister les sessions ouvertes
+   du client : `GET /v1/checkout/sessions?customer=<cus>&status=open`.
+   S'il en existe : soit bloquer la suppression (« un paiement est en cours
+   d'ouverture »), soit — recommandé — les **expirer** par
+   `POST /v1/checkout/sessions/{id}/expire` (aucun mouvement d'argent, mais
+   écriture chez Stripe : décision humaine), puis revérifier.
+2. *Course résiduelle* (paiement validé entre la vérification et l'effacement
+   en base) — décider du traitement d'un `checkout.session.completed` pour un
+   compte inexistant : annulation immédiate + remboursement (décision
+   financière) ou alerte manuelle. **Modifie le webhook : autorisation requise.**
+3. *Optionnel* — raccourcir la durée de vie des sessions (`expires_at`,
+   minimum 30 min). Modifie le parcours de paiement : décision humaine.
+
+### Autres points à revoir à l'activation
+
+- **Client Stripe non enregistré** : si `createCustomer` réussit mais que
+  l'enregistrement local de son identifiant échoue, la vérification avant
+  suppression ne le voit pas. Piste : clé d'idempotence à la création, ou
+  recherche `GET /v1/customers/search?query=metadata['userId']:'<id>'`.
+- **Webhook pour un compte inconnu** : aujourd'hui 500 (Stripe réessaie 3 jours).
+  Décider s'il faut répondre 200 avec une alerte journalisée.
+- **Données conservées chez Stripe** après suppression (client, e-mail,
+  factures) : conservées volontairement (obligations comptables). Supprimer le
+  client Stripe (`DELETE /v1/customers/{id}`) **annulerait immédiatement** ses
+  abonnements : à n'envisager qu'en connaissance de cause. Le dire dans la
+  politique de confidentialité.
+- **Test obligatoire en mode test Stripe** avant la production : ouvrir un
+  Checkout → supprimer le compte → tenter de payer → vérifier qu'aucun
+  abonnement ne survit.
+- **Limiteurs en mémoire** (IA, `/api/account/local-check`) : remis à zéro à
+  chaque redémarrage et non partagés entre plusieurs instances. Suffisant pour
+  une instance unique ; à remplacer par un stockage partagé si l'app est
+  déployée sur plusieurs instances.

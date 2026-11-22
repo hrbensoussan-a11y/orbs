@@ -25,6 +25,7 @@ import {
   userKey,
 } from "@/lib/userStorage";
 import { LEGACY_KEYS, LEGACY_STATUS_KEY } from "@/lib/legacyStorage";
+import { filterLocalEntry, type LocalExclusion } from "@/lib/localDataFilter";
 
 // ---------------------------------------------------------------------------
 // Inventaire des données locales d'un compte
@@ -33,7 +34,13 @@ import { LEGACY_KEYS, LEGACY_STATUS_KEY } from "@/lib/legacyStorage";
 /**
  * Chaque clé connue de l'espace d'un compte, et sa place dans l'archive.
  * Les clés inconnues (ajoutées plus tard) sont tout de même exportées, dans
- * « autres » : rien de ce qui appartient au compte n'est oublié.
+ * « autres » : rien de ce qui appartient au compte n'est oublié — mais elles
+ * passent par le filtre complet des données sensibles (lib/localDataFilter).
+ *
+ * Ajouter une clé ici, c'est certifier l'avoir RELUE : elle ne contient aucun
+ * moyen de connexion (jeton, mot de passe, clé…). Ses champs ne sont alors
+ * plus filtrés par leur nom (ils peuvent porter des noms choisis par l'élève,
+ * comme ses matières), seulement par le format de leurs valeurs.
  */
 export const LOCAL_DATA_CATALOG: Record<string, { path: string[]; label: string }> = {
   "orbs.agenda.v1": { path: ["agenda"], label: "Devoirs et emploi du temps" },
@@ -69,14 +76,24 @@ function parseValue(raw: string): unknown {
   }
 }
 
+/** `Object.hasOwn`, compatible avec les navigateurs plus anciens (tablettes scolaires). */
+function hasOwn(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+/** Propriété propre, même pour un nom comme « __proto__ » (aucune donnée perdue). */
+function defineOwn(node: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(node, key, { value, enumerable: true, writable: true, configurable: true });
+}
+
 function setPath(target: Record<string, unknown>, path: string[], value: unknown): void {
   let node = target;
   for (const part of path.slice(0, -1)) {
-    const next = node[part];
-    if (!next || typeof next !== "object") node[part] = {};
+    const next = hasOwn(node, part) ? node[part] : undefined;
+    if (!next || typeof next !== "object") defineOwn(node, part, {});
     node = node[part] as Record<string, unknown>;
   }
-  node[path[path.length - 1]] = value;
+  defineOwn(node, path[path.length - 1], value);
 }
 
 function allKeys(storage: Storage): string[] {
@@ -103,6 +120,8 @@ export type LocalAccountData = {
   elements: number;
   /** Libellés des données trouvées (pour s'y retrouver). */
   contenu: string[];
+  /** Ce qui n'a PAS été inclus (moyens de connexion, autre espace…), et pourquoi. */
+  elementsRetires: LocalExclusion[];
   [section: string]: unknown;
 };
 
@@ -110,7 +129,9 @@ export type LocalAccountData = {
  * Rassemble TOUTES les données de l'espace local de `userId` sur cet appareil
  * (et seulement elles). Les anciennes données de l'appareil ne sont incluses
  * que si elles sont explicitement attribuées à ce compte ; les données
- * orphelines (propriétaire inconnu) ne le sont jamais.
+ * orphelines (propriétaire inconnu) ne le sont jamais. Chaque donnée passe par
+ * le filtre des données sensibles : aucun jeton, mot de passe ou clé technique
+ * n'entre dans l'archive, et ce qui a été retiré est listé.
  */
 export function collectLocalData(storage: Storage, userId: string): LocalAccountData {
   const out: LocalAccountData = {
@@ -122,11 +143,19 @@ export function collectLocalData(storage: Storage, userId: string): LocalAccount
     collecteeLe: new Date().toISOString(),
     elements: 0,
     contenu: [],
+    elementsRetires: [],
   };
   const prefix = userKey(userId, "");
   const add = (key: string, raw: string, origin?: string) => {
-    const known = LOCAL_DATA_CATALOG[key];
-    const value = parseValue(raw);
+    // hasOwn : une clé nommée « constructor » ou « toString » n'est pas « connue ».
+    const known = hasOwn(LOCAL_DATA_CATALOG, key) ? LOCAL_DATA_CATALOG[key] : undefined;
+    const filtered = filterLocalEntry(key, parseValue(raw), {
+      reviewed: known !== undefined,
+      label: origin ? `${key} (${origin})` : key,
+      exclusions: out.elementsRetires,
+    });
+    if (!filtered.keep) return;
+    const value = filtered.value;
     if (known) {
       setPath(out, origin ? ["anciennesDonneesRattachees", ...known.path] : known.path, value);
       out.contenu.push(origin ? `${known.label} (${origin})` : known.label);
@@ -338,6 +367,46 @@ export function applyGoneIds(
     purged.push(id);
   }
   return purged;
+}
+
+export type SweepOutcome =
+  | { status: "skipped" }
+  | { status: "failed" }
+  | { status: "done"; purged: string[] };
+
+/** Réponse HTTP minimale (fetch dans le navigateur, simulée dans les tests). */
+export type SweepResponse = { ok: boolean; json: () => Promise<unknown> };
+
+/**
+ * Demande au serveur lesquels des AUTRES comptes de l'appareil n'existent
+ * plus (identifiants seulement, jamais de données) et n'efface qu'eux.
+ * Au plus toutes les 12 h. Toute réponse qui n'est pas un succès explicite
+ * (401, 413, 429 « trop de demandes », 503, réseau coupé, réponse illisible)
+ * n'efface RIEN et ne repousse pas la prochaine vérification.
+ */
+export async function sweepOtherDeviceAccounts(
+  storage: Storage,
+  currentUserId: string,
+  post: (ids: string[]) => Promise<SweepResponse>,
+  now = Date.now(),
+): Promise<SweepOutcome> {
+  const asked = listDeviceAccountIds(storage)
+    .filter((id) => id !== currentUserId)
+    .slice(0, SWEEP_MAX_IDS);
+  if (asked.length === 0 || !sweepDue(storage, now)) return { status: "skipped" };
+
+  let gone: unknown;
+  try {
+    const res = await post(asked);
+    if (!res.ok) return { status: "failed" };
+    gone = ((await res.json()) as { gone?: unknown } | null)?.gone;
+  } catch {
+    return { status: "failed" };
+  }
+  if (!Array.isArray(gone)) return { status: "failed" };
+  const purged = applyGoneIds(storage, asked, gone, currentUserId);
+  markSwept(storage, now);
+  return { status: "done", purged };
 }
 
 // ---------------------------------------------------------------------------
