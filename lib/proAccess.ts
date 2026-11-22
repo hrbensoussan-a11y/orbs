@@ -40,6 +40,25 @@ export function proEmailForSlot(slot: number): string {
   return `pro-${slot}@comptes.orbs.invalid`;
 }
 
+/** Domaine réservé aux comptes professionnels (voir proEmailForSlot). */
+const PRO_EMAIL_DOMAIN = "@comptes.orbs.invalid";
+
+/**
+ * Vrai si cette adresse est une adresse interne de compte professionnel
+ * (créée par `getOrCreateProUser`, jamais choisie par un utilisateur).
+ *
+ * Sert à PROTÉGER ces comptes dans le reste de l'app (centre de compte) :
+ * - l'adresse ne doit jamais être modifiable (la connexion par code la
+ *   recherche par valeur EXACTE — la changer créerait un compte en double
+ *   au prochain usage du code, et romprait l'accès actuel) ;
+ * - le mot de passe est aléatoire et JAMAIS communiqué à l'utilisateur :
+ *   aucune fonctionnalité ne doit prétendre pouvoir le « confirmer » ou le
+ *   réinitialiser par e-mail (l'adresse n'est pas une vraie boîte).
+ */
+export function isProAccountEmail(email: string): boolean {
+  return email.toLowerCase().endsWith(PRO_EMAIL_DOMAIN);
+}
+
 /**
  * Retrouve le slot correspondant à un code saisi, ou null.
  * Comparaison en temps constant sur l'empreinte (pas de court-circuit).

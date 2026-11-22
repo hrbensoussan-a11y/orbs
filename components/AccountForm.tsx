@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Check } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { updateAccount, type AccountState } from "@/app/actions/account";
 
 type Initial = {
@@ -12,7 +12,14 @@ type Initial = {
   email: string;
 };
 
-export function AccountForm({ initial }: { initial: Initial }) {
+export function AccountForm({
+  initial,
+  isPro = false,
+}: {
+  initial: Initial;
+  /** Compte professionnel par code : l'adresse ne peut pas être modifiée. */
+  isPro?: boolean;
+}) {
   const [state, action, pending] = useActionState<AccountState, FormData>(
     updateAccount,
     undefined,
@@ -44,15 +51,29 @@ export function AccountForm({ initial }: { initial: Initial }) {
 
       <label className="flex flex-col gap-1.5">
         <span className="text-sm text-ink-2">E-mail</span>
-        <input
-          name="email"
-          type="email"
-          defaultValue={initial.email}
-          className="input"
-          aria-invalid={state?.fieldErrors?.email ? true : undefined}
-        />
-        {state?.fieldErrors?.email && (
-          <span className="text-sm text-coral">{state.fieldErrors.email}</span>
+        {isPro ? (
+          <>
+            <div className="input flex items-center gap-2 text-ink-3 cursor-not-allowed select-none">
+              <Lock size={14} aria-hidden className="shrink-0" />
+              <span className="truncate">{initial.email}</span>
+            </div>
+            <span className="text-xs text-ink-3">
+              Compte professionnel par code — cette adresse est générée automatiquement et ne peut pas être modifiée.
+            </span>
+          </>
+        ) : (
+          <>
+            <input
+              name="email"
+              type="email"
+              defaultValue={initial.email}
+              className="input"
+              aria-invalid={state?.fieldErrors?.email ? true : undefined}
+            />
+            {state?.fieldErrors?.email && (
+              <span className="text-sm text-coral">{state.fieldErrors.email}</span>
+            )}
+          </>
         )}
       </label>
 
