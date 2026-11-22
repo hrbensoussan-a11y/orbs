@@ -7,6 +7,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { isProAccountEmail, proEmailForSlot, getOrCreateProUser, ensureUltimateAccess } from "@/lib/proAccess";
+import type { StripeReadGateway } from "@/lib/accountStripeCheck";
 import {
   exportAccountData,
   changeUserPassword,
@@ -101,75 +102,54 @@ describe("changeUserPassword", () => {
 });
 
 // ---------------------------------------------------------------------------
-describe("canDeleteAccount / requestAccountDeletion — blocage abonnement", () => {
+describe("canDeleteAccount — comptes sans référence Stripe (Stripe jamais interrogé)", () => {
+  // Une passerelle qui échoue si on l'appelle : prouve qu'aucun appel n'a lieu.
+  const noStripe: StripeReadGateway = {
+    configured: () => true,
+    retrieveSubscription: () => Promise.reject(new Error("Stripe ne doit pas être appelé")),
+    retrieveCustomer: () => Promise.reject(new Error("Stripe ne doit pas être appelé")),
+    listCustomerSubscriptions: () => Promise.reject(new Error("Stripe ne doit pas être appelé")),
+  };
+
   it("n'est pas bloqué sans abonnement du tout", async () => {
     const u = await makeUser({});
-    expect(await canDeleteAccount(u.id)).toEqual({ blocked: false });
+    expect(await canDeleteAccount(u.id, noStripe)).toEqual({ blocked: false, checkedWithStripe: false });
     await cleanup(u.id);
   });
 
-  it("bloque un abonnement Stripe RÉEL actif et non résilié", async () => {
-    const u = await makeUser({});
-    await prisma.subscription.create({
-      data: {
-        userId: u.id,
-        plan: "ultimate",
-        status: "active",
-        stripeCustomerId: "cus_test",
-        stripeSubscriptionId: "sub_test_123",
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
-        cancelAtPeriodEnd: false,
-      },
-    });
-    const block = await canDeleteAccount(u.id);
-    expect(block).toMatchObject({ blocked: true, reason: "subscription_active" });
+  it("compte professionnel Ultimate SANS référence Stripe : jamais bloqué, suppression par phrase", async () => {
+    const pro = await getOrCreateProUser(4);
+    await ensureUltimateAccess(pro.id);
+    const state = await prisma.subscription.findUnique({ where: { userId: pro.id } });
+    expect(state?.stripeSubscriptionId).toBeNull(); // bien la situation testée
+    expect(state?.stripeCustomerId).toBeNull();
+    expect(await canDeleteAccount(pro.id, noStripe)).toEqual({ blocked: false, checkedWithStripe: false });
 
-    const res = await requestAccountDeletion(u.id, PASSWORD);
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toBe("subscription_active");
-    // Le compte n'a PAS été supprimé : aucune suppression partielle.
-    expect(await prisma.user.findUnique({ where: { id: u.id } })).not.toBeNull();
-    await cleanup(u.id);
+    // Mauvaise phrase : refusée, compte intact.
+    const bad = await requestAccountDeletion(pro.id, "supprimer", noStripe);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.reason).toBe("bad_proof");
+    expect(await prisma.user.findUnique({ where: { id: pro.id } })).not.toBeNull();
+
+    // Bonne phrase : supprimé.
+    const ok = await requestAccountDeletion(pro.id, PRO_DELETE_CONFIRM_PHRASE, noStripe);
+    expect(ok).toEqual({ ok: true, deletedUserId: pro.id });
+    expect(await prisma.user.findUnique({ where: { id: pro.id } })).toBeNull();
   });
 
-  it("n'est plus bloqué une fois la résiliation programmée (cancelAtPeriodEnd)", async () => {
+  it("simulation de développement (abonnement local sans Stripe) : jamais bloqué", async () => {
     const u = await makeUser({});
     await prisma.subscription.create({
       data: {
         userId: u.id,
         plan: "plus",
         status: "active",
-        stripeSubscriptionId: "sub_test_456",
         currentPeriodStart: new Date(),
         currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
-        cancelAtPeriodEnd: true,
       },
     });
-    expect(await canDeleteAccount(u.id)).toEqual({ blocked: false });
-    const res = await requestAccountDeletion(u.id, PASSWORD);
-    expect(res.ok).toBe(true);
-    expect(await prisma.user.findUnique({ where: { id: u.id } })).toBeNull();
-  });
-
-  it("n'est pas bloqué par un abonnement Ultimate SANS référence Stripe réelle (compte pro / simulation dev)", async () => {
-    const slot = 4;
-    const pro = await getOrCreateProUser(slot);
-    await ensureUltimateAccess(pro.id);
-    const state = await prisma.subscription.findUnique({ where: { userId: pro.id } });
-    expect(state?.stripeSubscriptionId).toBeNull(); // bien la situation testée
-    expect(await canDeleteAccount(pro.id)).toEqual({ blocked: false });
-
-    // Mauvaise phrase : refusée, compte intact.
-    const bad = await requestAccountDeletion(pro.id, "supprimer");
-    expect(bad.ok).toBe(false);
-    if (!bad.ok) expect(bad.reason).toBe("bad_proof");
-    expect(await prisma.user.findUnique({ where: { id: pro.id } })).not.toBeNull();
-
-    // Bonne phrase : supprimé.
-    const ok = await requestAccountDeletion(pro.id, PRO_DELETE_CONFIRM_PHRASE);
-    expect(ok.ok).toBe(true);
-    expect(await prisma.user.findUnique({ where: { id: pro.id } })).toBeNull();
+    expect(await canDeleteAccount(u.id, noStripe)).toEqual({ blocked: false, checkedWithStripe: false });
+    await cleanup(u.id);
   });
 });
 

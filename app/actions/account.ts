@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser, deleteSession } from "@/lib/auth";
+import { requireUser, getCurrentUser, deleteSession } from "@/lib/auth";
 import { parseAvatar } from "@/lib/avatar/config";
 import { isProAccountEmail } from "@/lib/proAccess";
 import {
@@ -103,27 +102,39 @@ export async function changePassword(
 
 // ---------------------------------------------------------------------------
 // Mes données : suppression définitive du compte.
+//
+// Pas de redirection ici : l'action RÉPOND au navigateur, qui n'efface les
+// données locales de l'appareil qu'après cette confirmation, puis quitte la
+// page (voir lib/localAccountData → runAccountDeletion). Une erreur ou une
+// coupure réseau ne provoque donc jamais d'effacement local prématuré.
 // ---------------------------------------------------------------------------
 
-export type DeleteAccountState = { error?: string } | undefined;
+export type DeleteAccountState =
+  | { ok: true; deletedUserId: string }
+  | { ok: false; error: string }
+  | undefined;
 
 export async function deleteAccount(
   _prev: DeleteAccountState,
   formData: FormData,
 ): Promise<DeleteAccountState> {
-  const user = await requireUser();
+  // Pas de requireUser : sa redirection masquerait l'erreur au navigateur.
+  const user = await getCurrentUser();
+  if (!user) {
+    return { ok: false, error: "Ta session a expiré. Reconnecte-toi, puis recommence." };
+  }
   const acknowledged = formData.get("acknowledged") === "on";
   const proof = String(formData.get("proof") ?? "");
 
   if (!acknowledged) {
-    return { error: "Confirme d'abord que tu as compris les conséquences." };
+    return { ok: false, error: "Confirme d'abord que tu as compris les conséquences." };
   }
 
   const result: DeletionResult = await requestAccountDeletion(user.id, proof);
-  if (!result.ok) return { error: result.error };
+  if (!result.ok) return { ok: false, error: result.error };
 
   await deleteSession();
-  redirect("/login?deleted=1");
+  return { ok: true, deletedUserId: result.deletedUserId };
 }
 
 /** Enregistre la configuration d'avatar (soumise par l'éditeur). */

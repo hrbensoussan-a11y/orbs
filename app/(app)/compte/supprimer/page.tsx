@@ -3,9 +3,17 @@ import { AlertTriangle, ArrowLeft, Ban } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { isProAccountEmail } from "@/lib/proAccess";
 import { canDeleteAccount } from "@/lib/account";
+import { stripeBlockMessage, type StripeBlockReason } from "@/lib/accountStripeCheck";
 import { DeleteAccountFlow } from "@/components/account/DeleteAccountFlow";
 
 export const dynamic = "force-dynamic";
+
+const BLOCK_TITLE: Record<StripeBlockReason, (plan: string) => string> = {
+  subscription_active: (plan) => `Abonnement ${plan} actif`,
+  payment_pending: () => "Paiement en attente",
+  stripe_unavailable: () => "Vérification momentanément impossible",
+  stripe_unverifiable: () => "Abonnement à vérifier",
+};
 
 export default async function SupprimerComptePage() {
   const user = await requireUser();
@@ -44,6 +52,13 @@ export default async function SupprimerComptePage() {
           </Link>
           .
         </p>
+        <p className="text-sm text-ink-3 mt-2">
+          Sur cet appareil, tout est effacé dès la confirmation. Sur tes autres
+          appareils, les données gardées par le navigateur (agenda, notes, Apprendre,
+          conversations IA…) sont effacées la prochaine fois qu’Orbs s’y ouvre avec une
+          connexion internet. Un appareil qui n’ouvre plus Orbs les conserve : vide
+          alors les données du site dans les réglages de son navigateur.
+        </p>
       </section>
 
       {block.blocked ? (
@@ -53,15 +68,17 @@ export default async function SupprimerComptePage() {
         >
           <Ban size={20} className="shrink-0 mt-0.5" style={{ color: "var(--amber)" }} aria-hidden />
           <div>
-            <p className="font-semibold mb-1">Abonnement {block.planName} actif</p>
-            <p className="text-sm text-ink-2">
-              Supprimer ton compte maintenant laisserait ton abonnement continuer à être
-              facturé ailleurs. Résilie-le d’abord, puis reviens ici pour supprimer ton
-              compte.
-            </p>
-            <Link href="/abonnement" className="btn-primary mt-3 inline-flex">
-              Gérer mon abonnement
-            </Link>
+            <p className="font-semibold mb-1">{BLOCK_TITLE[block.reason](block.planName)}</p>
+            <p className="text-sm text-ink-2">{stripeBlockMessage(block.reason, block.planName)}</p>
+            {block.reason === "stripe_unavailable" ? (
+              <Link href="/compte/supprimer" className="btn-primary mt-3 inline-flex">
+                Réessayer
+              </Link>
+            ) : (
+              <Link href="/abonnement" className="btn-primary mt-3 inline-flex">
+                Gérer mon abonnement
+              </Link>
+            )}
           </div>
         </section>
       ) : (

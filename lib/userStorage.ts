@@ -26,6 +26,15 @@ export const USER_PREFIX = "orbs.user.";
  */
 export const ACTIVE_USER_KEY = "orbs.device.activeUser";
 
+/**
+ * Comptes SUPPRIMÉS connus de cet appareil (« pierres tombales ») : liste
+ * JSON d'identifiants. Plus aucune donnée n'est lue ni écrite pour eux —
+ * un onglet resté ouvert sur un compte supprimé ne peut pas recréer ses
+ * données — et leurs restes éventuels sont effacés au chargement suivant
+ * (voir lib/localAccountData → purgeTombstoned).
+ */
+export const TOMBSTONES_KEY = "orbs.device.gone";
+
 const USER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 let activeUserId: string | null = null;
@@ -60,20 +69,37 @@ function storage(): Storage | null {
   }
 }
 
+/** Identifiants des comptes supprimés connus de cet appareil. */
+export function readTombstones(from: Storage | null = storage()): string[] {
+  try {
+    const raw = from?.getItem(TOMBSTONES_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter(isValidUserId) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Ce compte a-t-il été supprimé (d'après cet appareil) ? */
+export function isTombstoned(userId: string): boolean {
+  return readTombstones().includes(userId);
+}
+
 /** Lit une donnée du compte actif. `null` si absente ou si aucun compte. */
 export function readUserItem(key: string): string | null {
   const s = storage();
-  if (!s || !activeUserId) return null;
+  if (!s || !activeUserId || isTombstoned(activeUserId)) return null;
   return s.getItem(userKey(activeUserId, key));
 }
 
 /**
- * Écrit une donnée dans l'espace du compte actif. Sans compte actif, n'écrit
- * rien et renvoie `false`. Peut lever (quota, mode privé) comme `setItem`.
+ * Écrit une donnée dans l'espace du compte actif. Sans compte actif — ou si
+ * ce compte a été supprimé — n'écrit rien et renvoie `false`. Peut lever
+ * (quota, mode privé) comme `setItem`.
  */
 export function writeUserItem(key: string, value: string): boolean {
   const s = storage();
-  if (!s || !activeUserId) return false;
+  if (!s || !activeUserId || isTombstoned(activeUserId)) return false;
   s.setItem(userKey(activeUserId, key), value);
   return true;
 }

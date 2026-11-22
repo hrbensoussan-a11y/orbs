@@ -72,8 +72,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 /** À utiliser dans les pages/layouts protégés. Redirige si non connecté. */
 export async function requireUser(): Promise<CurrentUser> {
+  const payload = await getSessionPayload();
+  if (!payload?.userId) redirect("/login");
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Session encore signée, mais le compte n'existe plus (supprimé depuis un
+  // autre appareil). Rediriger vers /login boucherait : le proxy, qui ne voit
+  // qu'une signature valide, renverrait vers l'accueil. Une route dédiée
+  // supprime le cookie et prévient l'appareil (voir app/api/auth/session-gone).
+  if (!user) redirect("/api/auth/session-gone");
   return user;
 }
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ChevronRight, Database, Download, Trash2 } from "lucide-react";
+import { ChevronRight, Database, Trash2 } from "lucide-react";
+import { ExportDataButton } from "./ExportDataButton";
 
 export function DataSection() {
   return (
@@ -20,12 +21,13 @@ export function DataSection() {
       <div className="border-t border-line pt-4">
         <p className="text-sm text-ink-2 mb-3">
           Une archive JSON avec ton profil, ton journal, ta progression, ton espace
-          famille et ton abonnement. Elle ne contient jamais ton mot de passe ni aucun
-          code de connexion.
+          famille et ton abonnement, plus ce que cet appareil garde en mémoire (agenda,
+          notes, paquets Apprendre, conversations IA, brouillon, préférences). Elle ne
+          contient jamais ton mot de passe ni aucun code de connexion. Les données
+          gardées par tes autres appareils n’y figurent que si tu exportes aussi depuis
+          eux.
         </p>
-        <a href="/api/account/export" className="btn-ghost" download>
-          <Download size={16} aria-hidden /> Télécharger mes données
-        </a>
+        <ExportDataButton />
       </div>
 
       {/* Suppression du compte */}

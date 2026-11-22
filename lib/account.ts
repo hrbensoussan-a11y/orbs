@@ -4,20 +4,28 @@
 // résoudre l'utilisateur courant (requireUser) puis appeler ce module.
 //
 // Trois responsabilités :
-//   - export complet des données personnelles (« Mes données ») ;
+//   - export des données personnelles DU SERVEUR (« Mes données ») — le
+//     navigateur y ajoute ensuite celles de l'appareil (lib/localAccountData) ;
 //   - changement de mot de passe (comptes avec un mot de passe réel) ;
-//   - suppression de compte (bloquée tant qu'un abonnement Stripe réel est
-//     actif et non résilié ; vérification d'identité adaptée au type de
-//     compte).
+//   - suppression de compte côté serveur (bloquée tant que Stripe, interrogé
+//     directement, ne confirme pas qu'aucun abonnement ne sera plus facturé ;
+//     vérification d'identité adaptée au type de compte).
 //
-// Aucune de ces fonctions ne touche à Stripe, aux webhooks ni aux règles de
-// crédits : la suppression s'appuie uniquement sur `getBillingState`, déjà
-// exporté en lecture par lib/billing/store.ts.
+// Aucune de ces fonctions n'ÉCRIT chez Stripe ni ne touche aux webhooks ou
+// aux règles de crédits : la vérification Stripe est en lecture seule.
 
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isProAccountEmail } from "./proAccess";
-import { getBillingState } from "./billing/store";
+import { PRO_DELETE_CONFIRM_PHRASE } from "./accountConstants";
+import {
+  checkStripeBeforeDeletion,
+  defaultStripeGateway,
+  stripeBlockMessage,
+  type StripeBlockReason,
+  type StripeDeletionCheck,
+  type StripeReadGateway,
+} from "./accountStripeCheck";
 import { PLANS, type PlanId } from "./billing/plans";
 import { parseAvatar } from "./avatar/config";
 import { readSummary, displayName } from "./family";
@@ -29,6 +37,12 @@ import { readSummary, displayName } from "./family";
 export type AccountExport = {
   exportedAt: string;
   avertissement: string;
+  /**
+   * Provenance des données. `appareil` vaut `null` tant que le navigateur
+   * n'a pas ajouté les données enregistrées sur l'appareil (voir
+   * lib/localAccountData → buildFullExport) : le serveur ne peut pas les lire.
+   */
+  sources: { serveur: string; appareil: string | null };
   compte: {
     id: string;
     email: string;
@@ -118,6 +132,13 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
       "Cette archive contient tes données personnelles. Elle ne contient jamais " +
       "ton mot de passe, ton code PIN, ton code famille ni aucun code de " +
       "vérification : ce sont des moyens de connexion, pas des données à exporter.",
+    sources: {
+      serveur:
+        "Données enregistrées sur le serveur d'Orbs : compte, avatar, préférences du " +
+        "compte, journal, résumé de progression Apprendre, espace famille, abonnement " +
+        "et crédits. Identiques depuis tous tes appareils.",
+      appareil: null,
+    },
     compte: {
       id: user.id,
       email: user.email,
@@ -312,70 +333,75 @@ export async function changeUserPassword(
 // Suppression de compte
 // ---------------------------------------------------------------------------
 
-export type DeletionBlock =
-  | { blocked: false }
-  | { blocked: true; reason: "subscription_active"; planName: string };
+export type DeletionBlock = StripeDeletionCheck;
 
 /**
- * Un abonnement Stripe RÉEL (stripeSubscriptionId non nul) encore actif et
- * pas déjà programmé pour résiliation bloque la suppression : supprimer le
- * compte romprait la référence locale sans rien dire à Stripe, qui
- * continuerait de facturer un compte qui n'existe plus côté Orbs. On ne
- * touche à aucun code Stripe ici : on demande d'utiliser le parcours de
- * résiliation existant (page Abonnement) avant de revenir.
+ * La suppression est-elle sûre du point de vue de la facturation ?
  *
- * Un abonnement « Ultimate » sans référence Stripe (compte professionnel par
- * code, ou simulation de développement sans Stripe configuré) ne bloque rien
- * : aucun tiers ne facture réellement ce compte.
+ * Si le compte est relié à Stripe (client ou abonnement), on interroge
+ * STRIPE DIRECTEMENT (lecture seule) et on ne se fie jamais au seul état
+ * local : voir lib/accountStripeCheck.ts. Toute incertitude bloque.
+ *
+ * Un compte sans référence Stripe (compte professionnel par code, simulation
+ * de développement) n'est facturé par personne : jamais bloqué, même avec
+ * l'offre Ultimate.
  */
-export async function canDeleteAccount(userId: string): Promise<DeletionBlock> {
-  const billing = await getBillingState(userId);
-  const hasRealStripeSub = !!billing.subscription?.stripeSubscriptionId;
-  if (hasRealStripeSub && billing.hasPaidAccess && !billing.cancelAtPeriodEnd) {
-    return { blocked: true, reason: "subscription_active", planName: planLabel(billing.plan) };
-  }
-  return { blocked: false };
+export async function canDeleteAccount(
+  userId: string,
+  gateway: StripeReadGateway = defaultStripeGateway,
+): Promise<DeletionBlock> {
+  const local = await prisma.subscription.findUnique({ where: { userId } });
+  return checkStripeBeforeDeletion(userId, local, gateway);
 }
 
 export type DeletionResult =
-  | { ok: true }
-  | { ok: false; reason: "subscription_active" | "bad_proof" | "not_found"; error: string };
+  | { ok: true; deletedUserId: string }
+  | {
+      ok: false;
+      reason: StripeBlockReason | "bad_proof" | "not_found";
+      error: string;
+    };
 
-/** Phrase à saisir pour confirmer la suppression d'un compte professionnel. */
-export const PRO_DELETE_CONFIRM_PHRASE = "SUPPRIMER";
+export { PRO_DELETE_CONFIRM_PHRASE };
 
 /**
- * Supprime DÉFINITIVEMENT le compte et tout ce qui lui est rattaché (journal,
- * notes, progression, abonnement local, portefeuille, liens famille…) via la
- * suppression en cascade définie dans le schéma. Vérifie d'abord :
- *   1. qu'aucun abonnement Stripe réel actif n'empêche la suppression ;
+ * Supprime DÉFINITIVEMENT le compte côté serveur. Vérifie d'abord :
+ *   1. auprès de Stripe, qu'aucun abonnement ne continuera à être facturé ;
  *   2. une preuve d'identité adaptée au compte — le mot de passe actuel pour
  *      un compte normal, la phrase de confirmation pour un compte
  *      professionnel (qui n'a pas de mot de passe connu).
- * N'écrit RIEN si l'une de ces vérifications échoue (pas de suppression
- * partielle).
+ * Puis, dans UNE transaction :
+ *   - les codes e-mail de son adresse EXACTE (connexion, vérification,
+ *     réinitialisation : EmailCode n'a pas de relation avec User, la cascade
+ *     ne les atteindrait pas) ;
+ *   - le compte et tout ce qui lui est rattaché (cascade du schéma).
+ * N'écrit RIEN si une vérification échoue (pas de suppression partielle), et
+ * n'annule jamais rien chez Stripe.
+ *
+ * Renvoie l'identifiant supprimé, confirmé par le serveur : c'est lui, et lui
+ * seul, que le navigateur effacera ensuite de l'appareil.
  */
 export async function requestAccountDeletion(
   userId: string,
   proof: string,
+  gateway: StripeReadGateway = defaultStripeGateway,
 ): Promise<DeletionResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, passwordHash: true },
+    select: { id: true, email: true, passwordHash: true },
   });
   if (!user) return { ok: false, reason: "not_found", error: "Compte introuvable." };
 
-  const block = await canDeleteAccount(userId);
+  const block = await canDeleteAccount(userId, gateway);
   if (block.blocked) {
     return {
       ok: false,
-      reason: "subscription_active",
-      error: `Ton abonnement ${block.planName} est actif. Résilie-le d'abord depuis la page Abonnement, puis reviens supprimer ton compte.`,
+      reason: block.reason,
+      error: stripeBlockMessage(block.reason, block.planName),
     };
   }
 
-  const pro = isProAccountEmail(user.email);
-  if (pro) {
+  if (isProAccountEmail(user.email)) {
     if (proof.trim() !== PRO_DELETE_CONFIRM_PHRASE) {
       return {
         ok: false,
@@ -390,8 +416,28 @@ export async function requestAccountDeletion(
     }
   }
 
-  // Suppression en cascade (voir prisma/schema.prisma : onDelete: Cascade sur
-  // toutes les relations de User). Aucune donnée partielle laissée derrière.
-  await prisma.user.delete({ where: { id: userId } });
-  return { ok: true };
+  // Adresse exacte telle qu'enregistrée (toujours en minuscules à l'écriture,
+  // côté User comme côté EmailCode) : aucun code d'une autre adresse touché.
+  const emails = [...new Set([user.email, user.email.toLowerCase()])];
+  await prisma.$transaction([
+    prisma.emailCode.deleteMany({ where: { email: { in: emails } } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+  return { ok: true, deletedUserId: user.id };
+}
+
+/**
+ * Parmi des identifiants de comptes trouvés dans le stockage d'un appareil,
+ * lesquels n'existent plus ? Sert au nettoyage des AUTRES appareils (voir
+ * app/api/account/local-check). Une erreur de base de données LÈVE : on ne
+ * déclare jamais un compte disparu par défaut.
+ */
+export async function findGoneUserIds(ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const found = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true },
+  });
+  const alive = new Set(found.map((u) => u.id));
+  return ids.filter((id) => !alive.has(id));
 }

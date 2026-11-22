@@ -170,7 +170,20 @@ export type StripeSubscription = {
   current_period_end?: number | null;
   items: { data: StripeSubscriptionItem[] };
   metadata?: Record<string, string>;
+  // Résiliation datée (alternative à cancel_at_period_end) et échéancier
+  // d'abonnement éventuel. Optionnels : lus uniquement pour vérifier, avant
+  // une suppression de compte, qu'aucun renouvellement ne reste prévu.
+  cancel_at?: number | null;
+  schedule?: string | null;
 };
+
+export type StripeCustomer = {
+  id: string;
+  deleted?: boolean;
+  metadata?: Record<string, string>;
+};
+
+export type StripeList<T> = { data: T[]; has_more: boolean };
 
 export type StripeEvent = {
   id: string;
@@ -230,6 +243,25 @@ export async function createBillingPortalSession(args: {
 
 export async function retrieveSubscription(subscriptionId: string): Promise<StripeSubscription> {
   return stripeRequest<StripeSubscription>("GET", `/subscriptions/${subscriptionId}`);
+}
+
+/** Lecture seule : le client Stripe (existence, suppression, métadonnées). */
+export async function retrieveCustomer(customerId: string): Promise<StripeCustomer> {
+  return stripeRequest<StripeCustomer>("GET", `/customers/${encodeURIComponent(customerId)}`);
+}
+
+/**
+ * Lecture seule : TOUS les abonnements d'un client, quel que soit leur statut
+ * (y compris ceux que la base locale ne connaît pas encore, webhook en retard).
+ */
+export async function listCustomerSubscriptions(
+  customerId: string,
+): Promise<StripeList<StripeSubscription>> {
+  return stripeRequest<StripeList<StripeSubscription>>("GET", "/subscriptions", {
+    customer: customerId,
+    status: "all",
+    limit: 100,
+  });
 }
 
 export async function retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession> {

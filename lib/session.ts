@@ -55,3 +55,40 @@ export async function decrypt(
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Jeton « compte disparu »
+//
+// Quand un navigateur présente une session valide pour un compte qui n'existe
+// plus (supprimé depuis un autre appareil), le serveur le prouve avec ce
+// jeton signé, transmis à l'écran de connexion : seul un jeton émis par le
+// serveur peut faire effacer les données locales d'un compte. Une simple URL
+// fabriquée à la main (`?gone=<id>`) n'efface donc jamais rien.
+//
+// Le jeton porte `goneUserId` (et non `userId`) : `decrypt` le refuse comme
+// session, et `verifyAccountGone` refuse une session comme preuve.
+// ---------------------------------------------------------------------------
+
+const GONE_PURPOSE = "account-gone";
+const GONE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export async function signAccountGone(userId: string): Promise<string> {
+  return new SignJWT({ purpose: GONE_PURPOSE, goneUserId: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(encodedKey);
+}
+
+/** Identifiant du compte disparu prouvé par le jeton, ou null. */
+export async function verifyAccountGone(token: string | undefined): Promise<string | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, encodedKey, { algorithms: ["HS256"] });
+    if (payload.purpose !== GONE_PURPOSE) return null;
+    const id = payload.goneUserId;
+    return typeof id === "string" && GONE_ID_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}

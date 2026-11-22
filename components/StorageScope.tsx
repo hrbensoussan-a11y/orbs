@@ -17,6 +17,48 @@ import { applyStoredAppearance } from "@/lib/appearance";
 import { resolveLegacy, type LegacyMode } from "@/lib/legacyStorage";
 import { lockScope, watchScope } from "@/lib/storageScope";
 import { commitDeviceUser, setActiveUser } from "@/lib/userStorage";
+import {
+  SWEEP_MAX_IDS,
+  applyGoneIds,
+  listDeviceAccountIds,
+  markSwept,
+  purgeTombstoned,
+  sweepDue,
+} from "@/lib/localAccountData";
+
+/**
+ * Autres comptes de l'appareil supprimés depuis ailleurs, alors que leur
+ * session avait déjà expiré ici : on demande au serveur lesquels n'existent
+ * plus (identifiants seulement, jamais de données) et on n'efface qu'eux.
+ * Au plus toutes les 12 h ; un échec réseau ou serveur n'efface rien.
+ */
+function sweepOtherAccounts(currentUserId: string): void {
+  let storage: Storage;
+  try {
+    storage = window.localStorage;
+  } catch {
+    return;
+  }
+  const asked = listDeviceAccountIds(storage)
+    .filter((id) => id !== currentUserId)
+    .slice(0, SWEEP_MAX_IDS);
+  if (asked.length === 0 || !sweepDue(storage)) return;
+  fetch("/api/account/local-check", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ ids: asked }),
+  })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data: { gone?: unknown } | null) => {
+      if (!data) return;
+      applyGoneIds(storage, asked, data.gone, currentUserId);
+      markSwept(storage);
+    })
+    .catch(() => {
+      /* hors ligne : on réessaiera au prochain chargement */
+    });
+}
 
 /** Prévient le service worker : vider son cache et/ou noter l'échéance. */
 function notifyServiceWorker(message: {
@@ -70,6 +112,13 @@ export function StorageScope({
 
   useEffect(() => {
     setActiveUser(userId);
+    // Restes d'un compte supprimé (écriture tardive d'un onglet périmé).
+    try {
+      purgeTombstoned(window.localStorage);
+    } catch {
+      /* stockage indisponible */
+    }
+    if (userId) sweepOtherAccounts(userId);
     const exp = expiresAt ? Date.parse(expiresAt) : NaN;
     const expMs = Number.isFinite(exp) ? exp : null;
 
