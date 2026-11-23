@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Check, RotateCw, ArrowLeft, ArrowRight, Trophy, Award, ChevronUp, ChevronDown } from "lucide-react";
 import type { Card, Deck } from "@/lib/learn/types";
-import { grade, previewInterval, dueCards, shuffle } from "@/lib/learn/sm2";
+import { delayLabel, grade, dueCards, shuffle } from "@/lib/learn/sm2";
+import type { Intensity } from "@/lib/learn/types";
 import { award, levelFromXp, recomputeBadges } from "@/lib/learn/progress";
 import { answerMatches, clozeParse, tokenizeWords, maskedSet } from "@/lib/learn/text";
 import type { LearnCtx } from "./ctx";
@@ -91,7 +92,7 @@ export function StudySession({
 
   /** Réponse à une carte (modes un-par-un). */
   function answer(card: Card, q: number, isCorrect: boolean) {
-    grade(card, q);
+    grade(card, q, ctx.s.settings.intensity);
     award(ctx.s, isCorrect ? "correct" : "attempt");
     ctx.save();
     const newCorrect = correct + (isCorrect ? 1 : 0);
@@ -136,7 +137,7 @@ export function StudySession({
           onFinish={(n, ok) => finish(ok, n)}
           grade={(cards) => {
             for (const c of cards) {
-              grade(c, 4);
+              grade(c, 4, ctx.s.settings.intensity);
               award(ctx.s, "correct");
             }
             ctx.save();
@@ -152,7 +153,7 @@ export function StudySession({
 
   return (
     <Shell onClose={onDone} progress={progress} correct={correct} wrong={wrong}>
-      {mode === "smart" && <SmartCard key={index} card={card} onGrade={(q) => answer(card, q, q >= 3)} />}
+      {mode === "smart" && <SmartCard key={index} card={card} intensity={ctx.s.settings.intensity} onGrade={(q) => answer(card, q, q >= 3)} />}
       {mode === "interro" && <Interro key={index} card={card} onGrade={(q) => answer(card, q, q >= 3)} />}
       {mode === "mcq" && <Mcq key={index} card={card} pool={pool} onAnswer={(ok) => answer(card, ok ? 4 : 1, ok)} />}
       {mode === "write" && <WriteCard key={index} card={card} onAnswer={(ok) => answer(card, ok ? 4 : 1, ok)} />}
@@ -196,12 +197,7 @@ function Shell({
 }
 
 /* ---------------- Révision intelligente ---------------- */
-function ivLabel(card: Card, q: number): string {
-  if (q < 3) return "< 1 j";
-  const d = previewInterval(card, q);
-  return d <= 1 ? "1 j" : `${d} j`;
-}
-function SmartCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void }) {
+function SmartCard({ card, intensity, onGrade }: { card: Card; intensity: Intensity; onGrade: (q: number) => void }) {
   const [shown, setShown] = useState(false);
   return (
     <div className="card p-6 flex flex-col gap-5 min-h-[calc(100dvh-210px)]">
@@ -227,7 +223,7 @@ function SmartCard({ card, onGrade }: { card: Card; onGrade: (q: number) => void
                 style={{ background: `color-mix(in srgb, ${b.tone} 12%, transparent)`, color: b.tone }}
               >
                 {b.label}
-                <span className="block text-[0.7rem] opacity-70 font-normal">{ivLabel(card, b.q)}</span>
+                <span className="block text-[0.7rem] opacity-70 font-normal">{delayLabel(card, b.q, intensity)}</span>
               </button>
             ))}
           </div>

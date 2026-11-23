@@ -1,4 +1,10 @@
 // Notifications de l'agenda — réglages + logique des rappels.
+//
+// Mode Concentration (Groupe B) : pendant une session de travail du minuteur
+// (lib/learn/focus), les rappels NON essentiels (devoirs, journal, soir) sont
+// mis en attente — ni envoyés ni notés comme envoyés — puis présentés à la
+// fin s'ils sont encore pertinents (recalculés à ce moment-là), une seule
+// fois. Les rappels de cours, essentiels, sonnent toujours.
 // Les rappels se déclenchent quand Orbs est ouvert sur l'appareil — au premier
 // plan, ou dans un onglet en arrière-plan sur ordinateur : un cours qui
 // approche, les devoirs du jour, et le soir « Préparer ma journée de demain ».
@@ -26,6 +32,9 @@ export type NotifSettings = {
   homeworkWeekend: boolean; // résumé aussi le samedi et le dimanche
   tomorrow: boolean; // le soir : « Préparer ma journée de demain »
   tomorrowTime: string; // "HH:MM" — heure du récapitulatif du soir
+  journal: boolean; // rappel d'écriture du journal (si rien d'écrit aujourd'hui)
+  journalTime: string; // "HH:MM" — heure du rappel du journal
+  focusHold: boolean; // Mode Concentration : rappels non essentiels en attente
 };
 
 export type NotifPermission = "unsupported" | "default" | "granted" | "denied";
@@ -45,6 +54,18 @@ export const TOMORROW_KEY = "prepare-tomorrow";
  * notification système.
  */
 export const TOMORROW_GRACE_MIN = 15;
+/** Clé du rappel d'écriture du journal. */
+export const JOURNAL_KEY = "journal-reminder";
+/** Rappels mis en attente par le Mode Concentration (détail : aucun). */
+export const DEFERRED_EVENT = "orbs:notif-deferred";
+const DEFERRED_KEY = "orbs.agenda.notif.deferred.v1";
+
+/** Libellés des rappels pouvant être mis en attente (fenêtre du minuteur). */
+export const DEFERRABLE_LABELS: Record<string, string> = {
+  "homework-summary": "Résumé des devoirs",
+  [TOMORROW_KEY]: "Préparer ma journée de demain",
+  [JOURNAL_KEY]: "Rappel du journal",
+};
 
 export const LEAD_CHOICES = [0, 5, 10, 15, 30, 60] as const;
 
@@ -60,6 +81,9 @@ export function defaultNotifSettings(): NotifSettings {
     homeworkWeekend: true,
     tomorrow: false,
     tomorrowTime: "20:00",
+    journal: false,
+    journalTime: "21:00",
+    focusHold: true,
   };
 }
 
@@ -87,6 +111,9 @@ export function loadNotifSettings(): NotifSettings {
       homeworkWeekend: o.homeworkWeekend === undefined ? d.homeworkWeekend : !!o.homeworkWeekend,
       tomorrow: o.tomorrow === undefined ? d.tomorrow : !!o.tomorrow,
       tomorrowTime: TIME_RE.test(String(o.tomorrowTime)) ? String(o.tomorrowTime) : d.tomorrowTime,
+      journal: o.journal === undefined ? d.journal : !!o.journal,
+      journalTime: TIME_RE.test(String(o.journalTime)) ? String(o.journalTime) : d.journalTime,
+      focusHold: o.focusHold === undefined ? d.focusHold : !!o.focusHold,
     };
   } catch {
     return d;
@@ -140,7 +167,7 @@ async function showSystemNotification(
   open?: string,
 ): Promise<boolean> {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
-  const url = open === "tomorrow" ? "/accueil?rappel=demain" : "/accueil";
+  const url = open === "tomorrow" ? "/accueil?rappel=demain" : open === "journal" ? "/write" : "/accueil";
   const options: NotificationOptions = {
     body,
     tag,
@@ -190,8 +217,9 @@ export async function fireNotification(
   settings: NotifSettings,
   tag = "orbs-agenda",
   open?: string,
+  ring = true,
 ): Promise<void> {
-  playRingtone(settings.sound, settings.volume).catch(() => {});
+  if (ring) playRingtone(settings.sound, settings.volume).catch(() => {});
   await showSystemNotification(title, body, tag, open).catch(() => false);
 }
 
@@ -260,11 +288,13 @@ export function homeworkSummary(
 
 export type Reminder = {
   key: string;
+  /** Rappel essentiel (cours) : jamais mis en attente par la concentration. */
+  essential?: boolean;
   title: string;
   body: string;
   tag: string;
   /** Vue à ouvrir quand on touche la notification. */
-  open?: "tomorrow";
+  open?: "tomorrow" | "journal";
   /** Résumé d'une ligne (bandeau dans Orbs). */
   summary?: string;
   /** Sans sonnerie ni notification système : seulement proposé dans Orbs. */
@@ -283,6 +313,8 @@ export function pendingReminders(
   settings: NotifSettings,
   now: Date,
   firedKeys: Set<string>,
+  /** `journalWritten` : une entrée existe-t-elle aujourd'hui ? null = inconnu. */
+  context: { journalWritten?: boolean | null } = {},
 ): Reminder[] {
   if (!settings.enabled) return [];
   const out: Reminder[] = [];
@@ -303,6 +335,7 @@ export function pendingReminders(
       const room = c.room ? ` · salle ${c.room}` : "";
       out.push({
         key,
+        essential: true,
         title: `Cours bientôt : ${c.subject}`,
         body: `${c.subject} ${when}${room}.`,
         tag: `orbs-cours-${c.id}`,
@@ -352,7 +385,80 @@ export function pendingReminders(
     }
   }
 
+  // Rappel d'écriture du journal : à partir de l'heure choisie, une fois par
+  // jour, seulement si rien n'a été écrit aujourd'hui. Sans réponse fiable
+  // (hors ligne…), on ne décide rien : nouvel essai au passage suivant.
+  if (journalReminderDue(settings, now, firedKeys)) {
+    if (context.journalWritten === true) {
+      out.push({ key: JOURNAL_KEY, title: "", body: "", tag: "orbs-journal", skip: true });
+    } else if (context.journalWritten === false) {
+      out.push({
+        key: JOURNAL_KEY,
+        title: "Ton journal t’attend",
+        body: "Tu n’as encore rien écrit aujourd’hui. Quelques lignes suffisent.",
+        tag: "orbs-journal",
+        open: "journal",
+      });
+    }
+  }
+
   return out;
+}
+
+/** Le rappel du journal est-il à examiner maintenant ? (avant d'interroger le serveur) */
+export function journalReminderDue(settings: NotifSettings, now: Date, firedKeys: Set<string>): boolean {
+  return (
+    settings.enabled &&
+    settings.journal &&
+    now.getHours() * 60 + now.getMinutes() >= toMin(settings.journalTime) &&
+    !firedKeys.has(JOURNAL_KEY)
+  );
+}
+
+/**
+ * Demande au serveur si une entrée du journal a été créée depuis minuit, à
+ * l'heure LOCALE de l'appareil (le jour de l'élève). null si on ne sait pas.
+ * Ne crée jamais rien.
+ */
+export async function fetchJournalWrittenToday(now: Date = new Date()): Promise<boolean | null> {
+  try {
+    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const res = await fetch(`/api/journal/today?since=${encodeURIComponent(since)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { wrote?: unknown };
+    return typeof data.wrote === "boolean" ? data.wrote : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---- Rappels mis en attente par le Mode Concentration ----
+
+type DeferredLog = { day: string; keys: string[] };
+
+/** Rappels actuellement en attente de la fin de la concentration (aujourd'hui). */
+export function loadDeferred(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = readUserItem(DEFERRED_KEY);
+    const o = raw ? (JSON.parse(raw) as Partial<DeferredLog>) : null;
+    if (!o || o.day !== dateKey() || !Array.isArray(o.keys)) return [];
+    return o.keys.filter((k): k is string => typeof k === "string");
+  } catch {
+    return [];
+  }
+}
+
+function saveDeferred(keys: string[]): void {
+  if (typeof window === "undefined") return;
+  const before = loadDeferred();
+  if (before.length === keys.length && before.every((k) => keys.includes(k))) return;
+  try {
+    writeUserItem(DEFERRED_KEY, JSON.stringify({ day: dateKey(), keys }));
+    window.dispatchEvent(new Event(DEFERRED_EVENT));
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -360,19 +466,50 @@ export function pendingReminders(
  * en évitant de répéter un rappel déjà envoyé aujourd'hui. À appeler sur un
  * intervalle depuis le planificateur (NotificationScheduler).
  */
-export async function runReminderTick(agenda: AgendaState, settings: NotifSettings): Promise<void> {
-  if (!settings.enabled) return;
+export async function runReminderTick(
+  agenda: AgendaState,
+  settings: NotifSettings,
+  opts: {
+    /** Une session de concentration est en cours (lib/learn/focus). */
+    focusActive?: boolean;
+    /** Vérifie l'écriture du jour (par défaut : le serveur). */
+    journalWritten?: (now: Date) => Promise<boolean | null>;
+  } = {},
+): Promise<void> {
+  if (!settings.enabled) {
+    saveDeferred([]);
+    return;
+  }
+  const now = new Date();
   const fired = loadFired();
   const set = new Set(fired.keys);
-  const due = pendingReminders(agenda, settings, new Date(), set);
-  if (due.length === 0) return;
+  const hold = !!opts.focusActive && settings.focusHold;
+
+  // Le journal n'est interrogé que lorsque son rappel est dû — et pas pendant
+  // la concentration : il sera vérifié, à jour, à la fin de la session.
+  let journalWritten: boolean | null = null;
+  const journalDue = journalReminderDue(settings, now, set);
+  if (journalDue && !hold) journalWritten = await (opts.journalWritten ?? fetchJournalWrittenToday)(now);
+
+  const due = pendingReminders(agenda, settings, now, set, { journalWritten });
+  // Concentration : les rappels non essentiels attendent (ni envoyés ni notés).
+  const waiting = hold ? due.filter((r) => !r.skip && !r.essential).map((r) => r.key) : [];
+  if (hold && journalDue && !waiting.includes(JOURNAL_KEY)) waiting.push(JOURNAL_KEY);
+  saveDeferred(waiting);
+  const send = hold ? due.filter((r) => r.skip || r.essential) : due;
+  if (send.length === 0) return;
   // Noté AVANT l'envoi : un onglet qui lirait le suivi juste après ne
   // renverra pas le même rappel.
-  for (const r of due) set.add(r.key);
+  for (const r of send) set.add(r.key);
   saveFired({ day: fired.day, keys: [...set] });
-  for (const r of due) {
+  // Plusieurs rappels d'un coup (fin de concentration…) : UNE seule sonnerie.
+  let rang = false;
+  for (const r of send) {
     if (r.skip) continue;
-    if (!r.quiet) await fireNotification(r.title, r.body, settings, r.tag, r.open);
+    if (!r.quiet) {
+      await fireNotification(r.title, r.body, settings, r.tag, r.open, !rang);
+      rang = true;
+    }
     if (r.open === "tomorrow") {
       try {
         window.dispatchEvent(new CustomEvent(TOMORROW_EVENT, { detail: { summary: r.summary ?? "" } }));

@@ -32,8 +32,13 @@ export interface Deck {
   cards: Card[];
 }
 
+/** Intensité des révisions (lib/learn/sm2 → spacedDays). */
+export type Intensity = "light" | "balanced" | "intensive";
+
 export interface Settings {
   dailyGoal: number; // 10 | 20 | 30 | 50
+  /** Espacement réel des prochaines révisions ; « balanced » par défaut. */
+  intensity: Intensity;
   /** Jours de repos : 0 = lundi … 6 = dimanche (voir lib/learn/rest). */
   restDays: number[];
 }

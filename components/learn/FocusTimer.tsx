@@ -6,9 +6,20 @@
 // qu'on travaille (on peut changer de page ou fermer la fenêtre, le minuteur
 // continue) et reprend après un rechargement. Une petite pastille flottante
 // montre le temps restant quand la fenêtre est fermée.
+//
+// Mode Concentration : pendant une phase de travail, les rappels non
+// essentiels (devoirs, journal, soir) attendent la fin de la session — voir
+// lib/agenda/notifications. La fenêtre et la pastille le montrent.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Play, Pause, RotateCcw, Timer } from "lucide-react";
+import { BellOff, X, Play, Pause, RotateCcw, Timer } from "lucide-react";
+import {
+  DEFERRABLE_LABELS,
+  DEFERRED_EVENT,
+  NOTIF_EVENT,
+  loadDeferred,
+  loadNotifSettings,
+} from "@/lib/agenda/notifications";
 import {
   loadFocus,
   saveFocus,
@@ -31,6 +42,23 @@ export function FocusTimer() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mode Concentration : réglage (Réglages → Apprentissage) et rappels en attente.
+  const [hold, setHold] = useState(true);
+  const [waiting, setWaiting] = useState<string[]>([]);
+
+  useEffect(() => {
+    const sync = () => {
+      setHold(loadNotifSettings().focusHold);
+      setWaiting(loadDeferred());
+    };
+    sync();
+    window.addEventListener(NOTIF_EVENT, sync);
+    window.addEventListener(DEFERRED_EVENT, sync);
+    return () => {
+      window.removeEventListener(NOTIF_EVENT, sync);
+      window.removeEventListener(DEFERRED_EVENT, sync);
+    };
+  }, []);
 
   const flash = useCallback((m: string) => {
     setToast(m);
@@ -151,6 +179,8 @@ export function FocusTimer() {
   if (!st) return null;
   const isWork = st.phase === "work";
   const tone = isWork ? "var(--green)" : "var(--sky)";
+  // Mode Concentration en cours (session de travail lancée).
+  const focusMode = hold && st.running && isWork;
 
   return (
     <>
@@ -159,11 +189,15 @@ export function FocusTimer() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Minuteur de concentration en cours — ouvrir"
+          aria-label={
+            focusMode
+              ? "Mode Concentration actif, rappels non essentiels en attente — ouvrir le minuteur"
+              : "Minuteur de concentration en cours — ouvrir"
+          }
           className="fixed left-1/2 -translate-x-1/2 z-[36] flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-float)]"
           style={{ bottom: "calc(92px + env(safe-area-inset-bottom,0px))", background: tone }}
         >
-          <Timer size={16} aria-hidden />
+          {focusMode ? <BellOff size={15} aria-hidden /> : <Timer size={16} aria-hidden />}
           <span className="display tabular-nums">{fmtMs(st.left)}</span>
           <span className="font-medium opacity-90">{isWork ? "Concentration" : "Pause"}</span>
         </button>
@@ -189,6 +223,32 @@ export function FocusTimer() {
             </button>
             <h2 className="text-lg font-semibold">Concentration</h2>
             <p className="text-sm text-ink-2 mt-1">{isWork ? "Au travail." : "Petite pause."}</p>
+
+            {hold && (
+              <div
+                className={`focus-mode${focusMode ? " is-on" : ""}`}
+                role="status"
+                aria-live="polite"
+              >
+                <BellOff size={16} aria-hidden className="shrink-0 mt-0.5" />
+                <span className="text-left">
+                  {focusMode ? (
+                    <>
+                      <strong className="font-semibold">Mode Concentration actif.</strong> Les rappels de
+                      devoirs, du journal et du soir attendent la fin de la session ; ceux des cours
+                      restent annoncés.
+                      {waiting.length > 0 && (
+                        <span className="block mt-1">
+                          En attente : {waiting.map((k) => DEFERRABLE_LABELS[k] ?? k).join(", ")}.
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>Pendant une session de travail, tes rappels non essentiels attendront la fin. Les cours restent annoncés.</>
+                  )}
+                </span>
+              </div>
+            )}
 
             <div className="my-4 display text-6xl font-semibold" style={{ color: isWork ? "var(--green-ink)" : "var(--sky)" }}>
               {fmtMs(st.left)}

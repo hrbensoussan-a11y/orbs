@@ -177,7 +177,7 @@ describe("persistance dans l'espace local du compte", () => {
   });
 
   it("des données locales anciennes ou altérées sont réparées au chargement", () => {
-    expect(heal({ settings: { dailyGoal: 30 } }).settings).toEqual({ dailyGoal: 30, restDays: [] });
+    expect(heal({ settings: { dailyGoal: 30 } }).settings).toEqual({ dailyGoal: 30, intensity: "balanced", restDays: [] });
     expect(heal({ settings: { dailyGoal: 20, restDays: [6, 6, 12, "x"] } }).settings.restDays).toEqual([6]);
   });
 });

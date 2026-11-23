@@ -23,6 +23,7 @@ const SOURCES = [
   "components/settings/LearningSettings.tsx",
   "components/settings/AssistantSettings.tsx",
   "components/settings/LearningProfileSettings.tsx",
+  "components/settings/AiHistorySettings.tsx",
   "components/agenda/NotificationSettings.tsx",
   "components/ai/AiOrbSettings.tsx",
   "components/ai/AiTagsSettings.tsx",

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { isLineSpacing } from "@/lib/reading";
 
 export async function updateSettings(formData: FormData): Promise<void> {
   const user = await requireUser();
@@ -36,6 +37,22 @@ export async function updateSettings(formData: FormData): Promise<void> {
 }
 
 export type ReadingSizeResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Espacement de lecture (Réglages → Apparence → Lecture), enregistré sur le
+ * compte comme la taille du texte : relu par le layout après revalidation.
+ */
+export async function setLineSpacing(spacing: string): Promise<ReadingSizeResult> {
+  const user = await requireUser();
+  if (!isLineSpacing(spacing)) return { ok: false, error: "Espacement inconnu." };
+  await prisma.settings.upsert({
+    where: { userId: user.id },
+    update: { lineSpacing: spacing },
+    create: { userId: user.id, lineSpacing: spacing },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
 
 /**
  * Taille du texte du journal, enregistrée dès qu'on la choisit (Réglages →

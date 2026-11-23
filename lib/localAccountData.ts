@@ -51,6 +51,8 @@ export const LOCAL_DATA_CATALOG: Record<string, { path: string[]; label: string 
   "orbs:draft:new": { path: ["brouillonJournal"], label: "Brouillon de journal pas encore enregistré" },
   "orbs.agenda.notif.v1": { path: ["rappels", "reglages"], label: "Réglages des rappels" },
   "orbs.agenda.notif.fired.v1": { path: ["rappels", "declenchesAujourdhui"], label: "Rappels déjà affichés aujourd'hui" },
+  "orbs.agenda.notif.deferred.v1": { path: ["rappels", "enAttenteConcentration"], label: "Rappels en attente de la fin d'une concentration" },
+  "orbs.ai.cleared": { path: ["preferences", "ia", "historiqueEffaceLe"], label: "Dernier effacement de l'historique appliqué" },
   "orbs.appearance": { path: ["preferences", "apparence"], label: "Thème, fond, luminosité" },
   "orbs.motion": { path: ["preferences", "animationsReduites"], label: "Animations réduites" },
   "orbs.subjectColors": { path: ["preferences", "couleursMatieres"], label: "Couleurs des matières" },

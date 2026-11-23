@@ -66,6 +66,8 @@ describe("données personnelles CONSERVÉES", () => {
     "orbs:draft:new": { title: "Mon secret", content: "Aujourd'hui j'ai changé mon mot de passe." },
     "orbs.agenda.notif.v1": { enabled: true, time: "18:00" },
     "orbs.agenda.notif.fired.v1": { day: "2026-11-22", keys: ["h1"] },
+    "orbs.agenda.notif.deferred.v1": { day: "2026-11-23", keys: ["homework-summary"] },
+    "orbs.ai.cleared": "1795000000000",
     "orbs.appearance": { theme: "jardin", bg: "verre", dim: 0.2 },
     "orbs.motion": "reduced",
     "orbs.subjectColors": { Secret: "#ef4444", Password: "#22c55e", Maths: "#3b82f6" },

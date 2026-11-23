@@ -7,7 +7,12 @@
 //   - « Matières » : une discussion par matière (l'IA sait la matière).
 // À droite : le chat de la discussion sélectionnée.
 // Tout est dans l'espace local du compte connecté ("orbs.ai.v2", voir
-// lib/userStorage). Parle au backend /api/ai/chat.
+// lib/ai/history) — jamais sur le serveur. Parle au backend /api/ai/chat.
+//
+// Conservation (Réglages → Assistant IA, lib/ai/retention) : chaque
+// discussion retient sa dernière activité ; en « 30 jours » les plus
+// anciennes sont supprimées, en « ne pas conserver » rien de nouveau n'est
+// enregistré (la discussion reste disponible pendant la visite).
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
@@ -53,13 +58,25 @@ import {
   extractTags,
 } from "@/lib/ai/tags";
 import { readUserItem, writeUserItem } from "@/lib/userStorage";
+import {
+  AI_HISTORY_EVENT,
+  enforceRetention,
+  forgetVisit,
+  loadHistory,
+  persistDeletionsOnly,
+  recallVisit,
+  rememberVisit,
+  saveHistory,
+  type HistoryRemoval,
+  type StoredConv,
+} from "@/lib/ai/history";
+import type { AiRetention } from "@/lib/ai/retention";
 
 type Ghost = { id: string; rest: string; start: number } | null;
 type Threads = Record<string, ChatMessage[]>;
-type Conv = { id: string; title: string; messages: ChatMessage[] };
+type Conv = StoredConv;
 type Sel = { kind: "subject" | "conv"; id: string } | null;
 
-const STORE_KEY = "orbs.ai.v2";
 const PANEL_KEY = "orbs.ai.panel"; // "0" = colonne « Discussions » masquée
 const VOICE_KEY = "orbs.ai.voice"; // voix choisie pour l'assistant vocal
 const AUTOPLAY_KEY = "orbs.ai.voiceplay"; // "0" = ne pas lire les réponses auto
@@ -107,29 +124,21 @@ function newId(): string {
   }
 }
 
-function loadStore(): { threads: Threads; convs: Conv[] } {
-  try {
-    const raw = readUserItem(STORE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      return {
-        threads: data?.threads && typeof data.threads === "object" ? data.threads : {},
-        convs: Array.isArray(data?.convs) ? data.convs : [],
-      };
-    }
-  } catch {
-    /* indisponible / corrompu */
-  }
-  return { threads: {}, convs: [] };
-}
-
 export function AiChat({
   configured,
+  retention = "keep",
+  historyClearedAt = null,
 }: {
   firstName?: string | null;
   configured: boolean;
+  /** Règle de conservation du compte (lue par la page, côté serveur). */
+  retention?: AiRetention;
+  /** Dernière demande « Supprimer l'historique » (ms), ou null. */
+  historyClearedAt?: number | null;
 }) {
   const [threads, setThreads] = useState<Threads>({});
+  // Dernière activité de chaque discussion par matière (ms).
+  const [threadsAt, setThreadsAt] = useState<Record<string, number>>({});
   const [convs, setConvs] = useState<Conv[]>([]);
   const [sel, setSel] = useState<Sel>(null);
   const [input, setInput] = useState("");
@@ -198,10 +207,14 @@ export function AiChat({
   }, []);
 
   useEffect(() => {
-    const { threads: t, convs: c } = loadStore();
+    // Règle du compte appliquée avant toute lecture (30 jours, effacement).
+    enforceRetention(retention, historyClearedAt);
+    // « Ne pas conserver » : la discussion de la visite (en mémoire) prime.
+    const h = (retention === "none" ? recallVisit() : null) ?? loadHistory();
     /* eslint-disable react-hooks/set-state-in-effect */
-    setThreads(t);
-    setConvs(c);
+    setThreads(h.threads);
+    setThreadsAt(h.threadsAt);
+    setConvs(h.convs);
     setLoaded(true);
     try {
       // Colonne « Discussions » : masquée si l'utilisateur l'a repliée, et
@@ -220,7 +233,7 @@ export function AiChat({
       /* indisponible */
     }
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [retention, historyClearedAt]);
 
   function setVoice(v: VoiceId) {
     setVoiceState(v);
@@ -260,29 +273,59 @@ export function AiChat({
     });
   }
 
-  const persist = useCallback((t: Threads, c: Conv[]) => {
-    try {
-      writeUserItem(STORE_KEY, JSON.stringify({ version: 3, threads: t, convs: c }));
-    } catch {
-      /* quota plein / mode privé */
-    }
-  }, []);
+  const persist = useCallback(
+    (t: Threads, ta: Record<string, number>, c: Conv[]) => {
+      const h = { threads: t, threadsAt: ta, convs: c };
+      // « Ne pas conserver » : la discussion reste en mémoire le temps de la
+      // visite, et seules les suppressions sont enregistrées.
+      if (retention === "none") {
+        rememberVisit(h);
+        persistDeletionsOnly(h);
+      } else {
+        forgetVisit();
+        saveHistory(h);
+      }
+    },
+    [retention],
+  );
 
   useEffect(() => {
     if (!loaded) return;
-    const id = setTimeout(() => persist(threads, convs), loading ? 500 : 0);
+    const id = setTimeout(() => persist(threads, threadsAt, convs), loading ? 500 : 0);
     return () => clearTimeout(id);
-  }, [threads, convs, loaded, loading, persist]);
+  }, [threads, threadsAt, convs, loaded, loading, persist]);
+
+  // Discussions supprimées ailleurs (règle des 30 jours, « Supprimer
+  // l'historique ») : on les retire aussi de l'écran, sans les réécrire.
+  useEffect(() => {
+    const onRemoved = (e: Event) => {
+      const d = (e as CustomEvent<HistoryRemoval>).detail;
+      if (!d) return;
+      setConvs((prev) => prev.filter((c) => !d.convs.includes(c.id)));
+      setThreads((prev) => {
+        const next = { ...prev };
+        for (const s of d.threads) delete next[s];
+        return next;
+      });
+      setSel((cur) =>
+        cur && ((cur.kind === "conv" && d.convs.includes(cur.id)) || (cur.kind === "subject" && d.threads.includes(cur.id)))
+          ? null
+          : cur,
+      );
+    };
+    window.addEventListener(AI_HISTORY_EVENT, onRemoved);
+    return () => window.removeEventListener(AI_HISTORY_EVENT, onRemoved);
+  }, []);
 
   useEffect(() => {
-    const flush = () => persist(threads, convs);
+    const flush = () => persist(threads, threadsAt, convs);
     window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", flush);
     return () => {
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", flush);
     };
-  }, [threads, convs, persist]);
+  }, [threads, threadsAt, convs, persist]);
 
   // Messages de la sélection courante.
   const messages: ChatMessage[] = !sel
@@ -302,10 +345,15 @@ export function AiChat({
 
   const applyTo = useCallback(
     (tgt: NonNullable<Sel>, mutate: (msgs: ChatMessage[]) => ChatMessage[]) => {
+      // Toute modification d'une discussion = activité (règle des 30 jours).
+      const at = Date.now();
       if (tgt.kind === "subject") {
         setThreads((prev) => ({ ...prev, [tgt.id]: mutate(prev[tgt.id] ?? []) }));
+        setThreadsAt((prev) => ({ ...prev, [tgt.id]: at }));
       } else {
-        setConvs((prev) => prev.map((c) => (c.id === tgt.id ? { ...c, messages: mutate(c.messages) } : c)));
+        setConvs((prev) =>
+          prev.map((c) => (c.id === tgt.id ? { ...c, messages: mutate(c.messages), updatedAt: at } : c)),
+        );
       }
     },
     [],
@@ -376,7 +424,7 @@ export function AiChat({
   }
 
   function newConversation() {
-    const conv: Conv = { id: newId(), title: "", messages: [] };
+    const conv: Conv = { id: newId(), title: "", messages: [], updatedAt: Date.now() };
     setConvs((prev) => [conv, ...prev]);
     select({ kind: "conv", id: conv.id });
   }
@@ -431,7 +479,7 @@ export function AiChat({
     let tgt = sel;
     let base = messages;
     if (!tgt) {
-      const conv: Conv = { id: newId(), title: "", messages: [] };
+      const conv: Conv = { id: newId(), title: "", messages: [], updatedAt: Date.now() };
       setConvs((prev) => [conv, ...prev]);
       tgt = { kind: "conv", id: conv.id };
       setSel(tgt);
@@ -942,6 +990,13 @@ export function AiChat({
                       <button className="ml-1.5 text-ink-3 hover:text-ink-2" onClick={() => setPendingAction(null)} aria-label="Retirer l'action">
                         <X size={12} aria-hidden />
                       </button>
+                    </span>
+                  </div>
+                )}
+                {retention === "none" && (
+                  <div className="mb-1 flex justify-start">
+                    <span className="chip" style={{ background: "color-mix(in srgb, var(--sky) 12%, transparent)", color: "var(--ink-2)" }}>
+                      Historique non conservé : cette discussion disparaîtra en quittant Orbs.
                     </span>
                   </div>
                 )}

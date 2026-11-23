@@ -91,6 +91,24 @@ export function loadFocus(): FocusState {
   }
 }
 
+/**
+ * Mode Concentration actif : une phase de TRAVAIL est en cours (minuteur
+ * lancé, pas en pause, pas encore terminée). La pause, la mise en pause ou
+ * la réinitialisation terminent le mode : les rappels en attente sont alors
+ * présentés (lib/agenda/notifications). Lu tel quel dans le stockage : vrai
+ * même si la fenêtre du minuteur est fermée ou dans un autre onglet.
+ */
+export function isFocusActive(now: number = Date.now()): boolean {
+  try {
+    const raw = readUserItem(KEY);
+    if (!raw) return false;
+    const r = JSON.parse(raw) as Partial<FocusState> | null;
+    return !!r && r.running === true && r.phase !== "break" && typeof r.endAt === "number" && r.endAt > now;
+  } catch {
+    return false;
+  }
+}
+
 export function saveFocus(s: FocusState): void {
   try {
     writeUserItem(KEY, JSON.stringify(s));

@@ -70,6 +70,8 @@ export type AccountExport = {
     frequenceRappel: string | null;
     objectifSerie: number | null;
     styleAssistant: string;
+    espacementTexte: string;
+    conservationConversations: string;
     profilApprentissage: ReturnType<typeof profileForExport>;
   } | null;
   journal: {
@@ -100,8 +102,8 @@ function planLabel(plan: string): string {
 
 /**
  * Archive JSON complète des données appartenant à `userId`. Ne contient
- * JAMAIS : mot de passe (hash), code famille (jeton d'invitation), code PIN
- * (hash), ni aucun code de vérification par e-mail — ce sont des moyens
+ * JAMAIS : mot de passe (hash), code famille (jeton d'invitation), ni aucun
+ * code de vérification par e-mail — ce sont des moyens
  * d'authentification, jamais des données personnelles à exporter.
  */
 export async function exportAccountData(userId: string): Promise<AccountExport> {
@@ -135,7 +137,7 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
     exportedAt: new Date().toISOString(),
     avertissement:
       "Cette archive contient tes données personnelles. Elle ne contient jamais " +
-      "ton mot de passe, ton code PIN, ton code famille ni aucun code de " +
+      "ton mot de passe, ton code famille ni aucun code de " +
       "vérification : ce sont des moyens de connexion, pas des données à exporter.",
     sources: {
       serveur:
@@ -176,8 +178,9 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
           frequenceRappel: user.settings.reminderFrequency,
           objectifSerie: user.settings.streakGoal,
           styleAssistant: styleLabel(toAiStyle(user.settings.aiStyle)),
+          espacementTexte: user.settings.lineSpacing,
+          conservationConversations: user.settings.aiRetention,
           profilApprentissage: profileForExport(parseLearningProfile(user.settings.learningProfile)),
-          // pinHash volontairement exclu : c'est un moyen d'authentification.
         }
       : null,
     journal: {
@@ -194,7 +197,6 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
         meteo: e.weather,
         favori: e.favorite,
         epingle: e.pinned,
-        verrouille: e.locked,
         energie: e.energy,
         heuresSommeil: e.sleepHours,
         activites: e.activities,

@@ -6,9 +6,11 @@
 // n'est accepté depuis le navigateur. Les valeurs sont revalidées ici, même si
 // l'interface ne propose que des choix valides.
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { getCurrentUser, requireUser } from "@/lib/auth";
 import { isAiStyle } from "@/lib/ai/style";
+import { isAiRetention, toAiRetention, type AiRetention } from "@/lib/ai/retention";
 import {
   EMPTY_PROFILE,
   serializeProfile,
@@ -84,4 +86,72 @@ export async function clearLearningProfile(): Promise<ProfileResult> {
   } catch {
     return { ok: false, error: SAVE_ERROR };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Conservation des conversations (lib/ai/retention)
+// ---------------------------------------------------------------------------
+
+export type RetentionResult = { ok: true } | { ok: false; error: string };
+
+/** Règle de conservation du compte : keep | 30d | none. */
+export async function setAiRetention(retention: unknown): Promise<RetentionResult> {
+  const user = await requireUser();
+  if (!isAiRetention(retention)) return { ok: false, error: "Choix inconnu." };
+  try {
+    await prisma.settings.upsert({
+      where: { userId: user.id },
+      update: { aiRetention: retention },
+      create: { userId: user.id, aiRetention: retention },
+    });
+    // Le layout (AiHistoryKeeper) relit la règle : sans cela, il appliquerait
+    // l'ancienne jusqu'au prochain rechargement complet.
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: SAVE_ERROR };
+  }
+}
+
+export type ClearHistoryResult = { ok: true; clearedAt: number } | { ok: false; error: string };
+
+/**
+ * « Supprimer l'historique » : date la demande sur le compte. Chaque appareil
+ * efface alors tout son historique de conversations, une fois (lib/ai/history
+ * → enforceRetention) ; celui-ci tout de suite, les autres à leur prochaine
+ * ouverture d'Orbs. Le serveur n'a aucune conversation à effacer : il n'en
+ * stocke pas.
+ */
+export async function clearAiHistory(): Promise<ClearHistoryResult> {
+  const user = await requireUser();
+  const clearedAt = new Date();
+  try {
+    await prisma.settings.upsert({
+      where: { userId: user.id },
+      update: { aiHistoryClearedAt: clearedAt },
+      create: { userId: user.id, aiHistoryClearedAt: clearedAt },
+    });
+    revalidatePath("/", "layout");
+    return { ok: true, clearedAt: clearedAt.getTime() };
+  } catch {
+    return { ok: false, error: SAVE_ERROR };
+  }
+}
+
+export type AiHistoryRule = { retention: AiRetention; clearedAt: number | null };
+
+/**
+ * Règle de conservation ACTUELLE du compte, relue avant chaque passage
+ * périodique de AiHistoryKeeper : un onglet resté ouvert ne doit jamais
+ * appliquer une règle changée depuis (par ex. « 30 jours » → « Conserver »
+ * sur un autre appareil). null sans session : rien n'est appliqué.
+ */
+export async function getAiHistoryRule(): Promise<AiHistoryRule | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const s = await prisma.settings.findUnique({
+    where: { userId: user.id },
+    select: { aiRetention: true, aiHistoryClearedAt: true },
+  });
+  return { retention: toAiRetention(s?.aiRetention), clearedAt: s?.aiHistoryClearedAt?.getTime() ?? null };
 }

@@ -9,7 +9,32 @@ Rappels concernés (Réglages → Notifications et Réglages → Agenda) :
 - résumé des devoirs du jour (avec ou sans le week-end) ;
 - **« Préparer ma journée de demain »** (Groupe A, A4) : chaque soir à l'heure
   choisie, un récapitulatif des cours, devoirs à rendre, devoirs à terminer et
-  affaires à préparer pour le lendemain.
+  affaires à préparer pour le lendemain ;
+- **rappel d'écriture du journal** (Groupe B, B6, Réglages → Notifications) :
+  désactivé par défaut ; à partir de l'heure choisie, une fois par jour,
+  seulement si aucune page n'a été créée depuis minuit (heure locale de
+  l'appareil). Orbs le vérifie auprès du serveur (`/api/journal/today`, qui
+  ne renvoie qu'un oui/non et ne crée rien), uniquement quand le rappel est
+  dû. Sans réponse fiable (hors ligne), rien n'est décidé : nouvel essai au
+  passage suivant.
+
+## Mode Concentration (Groupe B, B2)
+
+Pendant une **phase de travail** du minuteur de concentration (lancée, pas en
+pause, pas terminée), et si le réglage « Mode Concentration » est actif
+(Réglages → Apprentissage, actif par défaut) :
+
+| Rappel | Pendant la session |
+| --- | --- |
+| Avant un cours | **Essentiel** : sonne normalement. |
+| Résumé des devoirs, journal, « Préparer ma journée de demain » | **En attente** : ni envoyé ni noté comme envoyé. La fenêtre du minuteur les liste. |
+
+À la fin de la session — fin du temps, mise en pause ou réinitialisation —
+les rappels en attente sont **recalculés** : un devoir terminé entre-temps, ou
+une page écrite pendant la session, n'est plus signalé. Ceux qui restent
+pertinents partent une seule fois (suivi « déjà envoyé »), avec une seule
+sonnerie même s'ils sont plusieurs. Une session qui dépasse minuit laisse
+tomber les rappels de la veille (le suivi est quotidien).
 
 ## 1. Ce qui fonctionne aujourd'hui (sans aucune configuration)
 

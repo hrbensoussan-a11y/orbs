@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Check, RotateCw, Trophy, Award } from "lucide-react";
 import type { Card, Kind } from "@/lib/learn/types";
-import { grade, previewInterval } from "@/lib/learn/sm2";
+import { delayLabel, grade } from "@/lib/learn/sm2";
+import type { Intensity } from "@/lib/learn/types";
 import { award, levelFromXp, recomputeBadges } from "@/lib/learn/progress";
 import { clozeParse } from "@/lib/learn/text";
 import { interleavedDue, type ReviewItem } from "@/lib/learn/review";
@@ -61,7 +62,7 @@ export function DailyReview({ ctx, onDone }: { ctx: LearnCtx; onDone: () => void
 
   function answer(item: ReviewItem, q: number) {
     const isCorrect = q >= 3;
-    grade(item.card, q);
+    grade(item.card, q, ctx.s.settings.intensity);
     award(ctx.s, isCorrect ? "correct" : "attempt");
     ctx.save();
     const nc = correct + (isCorrect ? 1 : 0);
@@ -118,7 +119,7 @@ export function DailyReview({ ctx, onDone }: { ctx: LearnCtx; onDone: () => void
 
   return (
     <Shell onClose={onDone} progress={progress} correct={correct} wrong={wrong}>
-      <RecallCard key={index} item={item} colors={colors} onGrade={(q) => answer(item, q)} />
+      <RecallCard key={index} item={item} colors={colors} intensity={ctx.s.settings.intensity} onGrade={(q) => answer(item, q)} />
     </Shell>
   );
 }
@@ -170,19 +171,16 @@ const BACK: Record<Kind, string> = {
   order: "Le bon ordre",
 };
 
-function ivLabel(card: Card, q: number): string {
-  if (q < 3) return "< 1 j";
-  const d = previewInterval(card, q);
-  return d <= 1 ? "1 j" : `${d} j`;
-}
 
 function RecallCard({
   item,
   colors,
+  intensity,
   onGrade,
 }: {
   item: ReviewItem;
   colors: Record<string, string>;
+  intensity: Intensity;
   onGrade: (q: number) => void;
 }) {
   const [shown, setShown] = useState(false);
@@ -222,7 +220,7 @@ function RecallCard({
                 style={{ background: `color-mix(in srgb, ${b.tone} 12%, transparent)`, color: b.tone }}
               >
                 {b.label}
-                <span className="block text-[0.7rem] opacity-70 font-normal">{ivLabel(card, b.q)}</span>
+                <span className="block text-[0.7rem] opacity-70 font-normal">{delayLabel(card, b.q, intensity)}</span>
               </button>
             ))}
           </div>

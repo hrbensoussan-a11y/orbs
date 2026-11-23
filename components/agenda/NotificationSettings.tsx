@@ -2,7 +2,8 @@
 
 // Réglages des rappels de l'agenda, répartis en deux catégories des Réglages :
 //   - Notifications : interrupteur général (demande la permission du
-//     navigateur), sonnerie avec aperçu, volume, « Tester le rappel » ;
+//     navigateur), sonnerie avec aperçu, volume, « Tester le rappel », et le
+//     rappel d'écriture du journal (+ heure) ;
 //   - Agenda : rappel avant les cours (+ délai), résumé des devoirs (+ heure,
 //     + week-end), et le soir « Préparer ma journée de demain » (+ heure,
 //     + aperçu du récapitulatif réel).
@@ -11,12 +12,13 @@
 // enregistrement et déjà écouté par le planificateur des rappels.
 
 import { useCallback, useEffect, useState } from "react";
-import { BellOff, BellRing, CalendarCheck, CalendarClock, CalendarDays, CalendarOff, Eye, MoonStar, Music2, Play, Volume1, Volume2 } from "lucide-react";
+import { BellOff, BellRing, CalendarCheck, CalendarClock, CalendarDays, CalendarOff, Eye, GraduationCap, MoonStar, Music2, NotebookPen, Play, Volume1, Volume2 } from "lucide-react";
 import { RINGTONES, playRingtone, unlockOnGesture } from "@/lib/sound/ringtones";
 import {
   LEAD_CHOICES,
   NOTIF_EVENT,
   defaultNotifSettings,
+  JOURNAL_KEY,
   TOMORROW_KEY,
   fireNotification,
   loadNotifSettings,
@@ -64,8 +66,27 @@ function useNotifSettings() {
 
 export function NotificationGeneralSettings() {
   const { s, perm, setPerm, patch } = useNotifSettings();
+  const [journalHint, setJournalHint] = useState("");
+
+  // « Prochain rappel » du journal : dépend de l'heure, calculé hors du rendu.
+  useEffect(() => {
+    if (!s?.journal) return;
+    const today = !isPastToday(s.journalTime) && !reminderFiredToday(JOURNAL_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJournalHint(
+      `Prochain : ${today ? "aujourd’hui" : "demain"} à ${s.journalTime}, si tu n’as encore rien écrit.`,
+    );
+  }, [s]);
 
   if (!s) return <div className="h-40" aria-hidden />;
+
+  /** Comme le récapitulatif du soir : activé après l'heure, il commence demain. */
+  function changeJournal(next: Partial<Pick<NotifSettings, "journal" | "journalTime">>) {
+    if (!s) return;
+    const merged = { ...s, ...next };
+    if (merged.journal && isPastToday(merged.journalTime)) markReminderFired(JOURNAL_KEY);
+    patch(next);
+  }
 
   async function toggleEnabled(next: boolean) {
     if (next) setPerm(await requestNotifPermission());
@@ -179,11 +200,49 @@ export function NotificationGeneralSettings() {
         </SettingRow>
       </SettingsGroup>
 
+      <SettingsGroup
+        title="Journal"
+        footer="Une fois par jour, à partir de l’heure choisie, seulement si aucune page n’a encore été écrite aujourd’hui. Il sonne si Orbs est ouvert sur cet appareil."
+      >
+        <SettingRow
+          id="rappel-journal"
+          icon={<NotebookPen size={17} />}
+          title="Rappel d’écriture du journal"
+          desc="Pour penser à écrire quelques lignes dans ta journée."
+          disabled={off}
+        >
+          <Switch
+            checked={s.journal}
+            onChange={(v) => changeJournal({ journal: v })}
+            label="Rappel d’écriture du journal"
+            disabled={off}
+          />
+        </SettingRow>
+        {s.journal && (
+          <SettingRow title="Chaque jour à" desc={journalHint} disabled={off}>
+            <input
+              type="time"
+              className="st-time"
+              value={s.journalTime}
+              onChange={(e) => e.target.value && changeJournal({ journalTime: e.target.value })}
+              aria-label="Heure du rappel du journal"
+              disabled={off}
+            />
+          </SettingRow>
+        )}
+      </SettingsGroup>
+
       <SettingJump
         category="agenda"
         icon={<CalendarDays size={16} />}
         title="Quand être prévenu·e"
         desc="Rappels avant les cours et résumé des devoirs, dans Agenda."
+      />
+      <SettingJump
+        category="apprentissage"
+        icon={<GraduationCap size={16} />}
+        title="Mode Concentration"
+        desc="Pendant tes sessions de travail, les rappels non essentiels attendent la fin."
       />
     </>
   );

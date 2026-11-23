@@ -304,14 +304,21 @@ model Settings {
   reminderFrequency String? // "daily" | "weekdays" | "custom"
   streakGoal        Int? // objectif de régularité, en jours/semaine
 
-  // Verrouillage local (phase 3 — champs prêts)
-  pinLockEnabled Boolean @default(false)
-  pinHash        String?
-
   // Assistant IA (Réglages → Assistant IA). Lus par /api/ai/chat côté
   // serveur : le navigateur n'envoie jamais ces préférences avec la question.
   aiStyle         String  @default("balanced") // "guide" | "balanced" | "direct" (lib/ai/style.ts)
   learningProfile String? // JSON facultatif, validé (lib/ai/learningProfile.ts) ; null = profil vide
+
+  // Conservation des conversations avec l'assistant (lib/ai/retention.ts).
+  // Les conversations elles-mêmes ne sont JAMAIS stockées sur le serveur :
+  // elles vivent dans l'espace local du compte, sur chaque appareil, qui
+  // applique cette règle. `aiHistoryClearedAt` : « Supprimer l'historique »
+  // demandé à cette date — chaque appareil efface ce qui est antérieur.
+  aiRetention        String    @default("keep") // "keep" | "30d" | "none"
+  aiHistoryClearedAt DateTime?
+
+  // Confort de lecture (journal, réponses de l'assistant) : espacement.
+  lineSpacing String @default("normal") // "compact" | "normal" | "large" (lib/reading.ts)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -348,7 +355,6 @@ model Entry {
   // États
   favorite Boolean @default(false)
   pinned   Boolean @default(false)
-  locked   Boolean @default(false) // entrée sensible (verrou spécifique)
 
   // Trackers optionnels
   energy     Int? // 1-5

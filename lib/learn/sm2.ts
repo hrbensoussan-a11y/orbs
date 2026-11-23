@@ -1,8 +1,35 @@
 // Planificateur : répétition espacée SM-2 (spec §3).
-import type { Card, Deck } from "./types";
+//
+// Intensité des révisions (Réglages → Apprentissage) : elle agit sur la DATE
+// réelle de la prochaine révision, pas sur la mesure SM-2 elle-même.
+//   - `card.iv` reste l'intervalle SM-2 standard (ce que l'élève sait) : la
+//     progression (maîtrise), les XP et les séries n'en dépendent donc pas ;
+//   - `card.due` = maintenant + spacedDays(iv, intensité) : plus espacé en
+//     « Légère », identique en « Équilibrée » (défaut), plus rapproché en
+//     « Intensive ». Les erreurs (q < 3) restent revues tout de suite.
+import type { Card, Deck, Intensity } from "./types";
 
 const DAY = 86_400_000;
 const MIN = 60_000;
+
+export const DEFAULT_INTENSITY: Intensity = "balanced";
+const INTENSITY_IDS: readonly string[] = ["light", "balanced", "intensive"];
+
+/** Garde-type : une intensité connue, sinon « Équilibrée ». */
+export function toIntensity(value: unknown): Intensity {
+  return typeof value === "string" && INTENSITY_IDS.includes(value) ? (value as Intensity) : DEFAULT_INTENSITY;
+}
+
+/**
+ * Jours à attendre avant la prochaine révision, pour un intervalle SM-2 `iv`.
+ * L'ordre Légère > Équilibrée > Intensive est garanti pour tout intervalle
+ * (même 1 jour : 2 j / 1 j / 12 h).
+ */
+export function spacedDays(iv: number, intensity: Intensity = DEFAULT_INTENSITY): number {
+  if (intensity === "light") return Math.max(iv + 1, Math.round(iv * 1.5));
+  if (intensity === "intensive") return iv <= 1 ? 0.5 : Math.max(1, Math.min(iv - 1, Math.round(iv * 0.6)));
+  return iv;
+}
 
 /** Intervalle (jours) pour la prochaine révision, selon la qualité q (3..5). */
 export function nextInterval(card: Card, q: number): number {
@@ -14,7 +41,7 @@ export function nextInterval(card: Card, q: number): number {
 }
 
 /** Applique une note q (1,3,4,5) à une carte (mutation planifiée, renvoie la carte). */
-export function grade(card: Card, q: number): Card {
+export function grade(card: Card, q: number, intensity: Intensity = DEFAULT_INTENSITY): Card {
   const now = Date.now();
   if (q < 3) {
     card.reps = 0;
@@ -24,16 +51,24 @@ export function grade(card: Card, q: number): Card {
   } else {
     card.iv = nextInterval(card, q);
     card.reps += 1;
-    card.due = now + card.iv * DAY;
+    card.due = now + spacedDays(card.iv, intensity) * DAY;
   }
   card.ef = Math.max(1.3, card.ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
   return card;
 }
 
-/** Prévisualise l'intervalle (jours) pour une note q sans rien modifier. */
-export function previewInterval(card: Card, q: number): number {
+/** Prévisualise le délai (jours, peut être 0,5) pour une note q, sans rien modifier. */
+export function previewInterval(card: Card, q: number, intensity: Intensity = DEFAULT_INTENSITY): number {
   if (q < 3) return 0;
-  return nextInterval(card, q);
+  return spacedDays(nextInterval(card, q), intensity);
+}
+
+/** Libellé court du délai : « < 1 j », « 12 h », « 1 j », « 6 j ». */
+export function delayLabel(card: Card, q: number, intensity: Intensity = DEFAULT_INTENSITY): string {
+  if (q < 3) return "< 1 j";
+  const d = previewInterval(card, q, intensity);
+  if (d < 1) return `${Math.round(d * 24)} h`;
+  return `${d} j`;
 }
 
 export function isDue(card: Card, at: number = Date.now()): boolean {

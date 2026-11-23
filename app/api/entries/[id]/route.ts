@@ -75,7 +75,6 @@ export async function PATCH(
     data.template = body.template ? String(body.template).slice(0, 50) : null;
   if ("favorite" in body) data.favorite = Boolean(body.favorite);
   if ("pinned" in body) data.pinned = Boolean(body.pinned);
-  if ("locked" in body) data.locked = Boolean(body.locked);
   if ("entryDate" in body) {
     const d = parseDate(body.entryDate);
     if (d) data.entryDate = d;

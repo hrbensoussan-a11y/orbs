@@ -23,6 +23,8 @@ import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { LearningSettings } from "@/components/settings/LearningSettings";
 import { AssistantSettings } from "@/components/settings/AssistantSettings";
 import { LearningProfileSettings } from "@/components/settings/LearningProfileSettings";
+import { AiHistorySettings } from "@/components/settings/AiHistorySettings";
+import { toAiRetention } from "@/lib/ai/retention";
 import { toAiStyle } from "@/lib/ai/style";
 import { parseLearningProfile } from "@/lib/ai/learningProfile";
 import { AiOrbSettings } from "@/components/ai/AiOrbSettings";
@@ -44,7 +46,14 @@ export default async function SettingsPage() {
   const [settings, billing] = await Promise.all([
     prisma.settings.findUnique({
       where: { userId: user.id },
-      select: { fontSize: true, aiStyle: true, learningProfile: true },
+      select: {
+        fontSize: true,
+        lineSpacing: true,
+        aiStyle: true,
+        learningProfile: true,
+        aiRetention: true,
+        aiHistoryClearedAt: true,
+      },
     }),
     getBillingState(user.id),
   ]);
@@ -154,7 +163,12 @@ export default async function SettingsPage() {
             avatar: <Avatar config={user.avatar} size={52} />,
           }}
           sections={{
-            apparence: <AppearanceSettings initialFontSize={settings?.fontSize ?? "base"} />,
+            apparence: (
+              <AppearanceSettings
+                initialFontSize={settings?.fontSize ?? "base"}
+                initialLineSpacing={settings?.lineSpacing ?? "normal"}
+              />
+            ),
             notifications: <NotificationGeneralSettings />,
             agenda: <AgendaReminderSettings />,
             apprentissage: <LearningSettings />,
@@ -170,6 +184,10 @@ export default async function SettingsPage() {
                     profile: parseLearningProfile(settings?.learningProfile),
                   }}
                   firstName={(user.firstName || "").trim() || null}
+                />
+                <AiHistorySettings
+                  initialRetention={toAiRetention(settings?.aiRetention)}
+                  initialClearedAt={settings?.aiHistoryClearedAt?.getTime() ?? null}
                 />
                 <AiOrbSettings />
                 <AiTagsSettings />

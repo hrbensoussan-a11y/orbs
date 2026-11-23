@@ -28,10 +28,10 @@ export type SettingsCategory = {
 
 export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
   { id: "apparence", label: "Apparence", desc: "Thème, fond, lecture et confort visuel", tone: "coral" },
-  { id: "notifications", label: "Notifications", desc: "Rappels, sonnerie et volume", tone: "amber" },
+  { id: "notifications", label: "Notifications", desc: "Rappels, sonnerie et journal", tone: "amber" },
   { id: "agenda", label: "Agenda", desc: "Rappels de cours, de devoirs et du soir", tone: "sky" },
-  { id: "apprentissage", label: "Apprentissage", desc: "Objectif, jours de repos et concentration", tone: "green" },
-  { id: "assistant", label: "Assistant IA", desc: "Style, profil, voix et commandes", tone: "lilac" },
+  { id: "apprentissage", label: "Apprentissage", desc: "Objectif, intensité, repos et concentration", tone: "green" },
+  { id: "assistant", label: "Assistant IA", desc: "Style, profil, historique et commandes", tone: "lilac" },
   { id: "compte", label: "Compte et données", desc: "Profil, exports et déconnexion", tone: "ink" },
 ] as const;
 
@@ -62,7 +62,8 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { id: "theme", category: "apparence", title: "Thème", keywords: "clair sombre nuit mode sombre dark anti lumière bleue chaud couleurs" },
   { id: "fond", category: "apparence", title: "Fond d’écran", keywords: "arrière-plan background arc-en-ciel menthe coucher soleil océan uni" },
   { id: "luminosite", category: "apparence", title: "Luminosité", keywords: "atténuer sombre yeux fatigue éclairage" },
-  { id: "taille-texte", category: "apparence", title: "Taille du texte du journal", keywords: "police lecture écriture grand petit lisibilité accessibilité" },
+  { id: "taille-texte", category: "apparence", title: "Taille du texte", keywords: "police lecture écriture journal assistant grand petit lisibilité accessibilité confort" },
+  { id: "espacement-texte", category: "apparence", title: "Espacement du texte", keywords: "interligne lignes paragraphes lecture aéré serré confort lisibilité" },
   { id: "animations", category: "apparence", title: "Réduire les animations", keywords: "mouvements transitions accessibilité lent téléphone confort" },
   { id: "reinitialiser-apparence", category: "apparence", title: "Réinitialiser l’apparence", keywords: "défaut remettre à zéro" },
   // Notifications
@@ -70,6 +71,7 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { id: "sonnerie", category: "notifications", title: "Sonnerie", keywords: "son alerte cloche carillon marimba silence" },
   { id: "volume", category: "notifications", title: "Volume", keywords: "son sonnerie fort faible" },
   { id: "tester-rappel", category: "notifications", title: "Tester le rappel", keywords: "essai essayer son" },
+  { id: "rappel-journal", category: "notifications", title: "Rappel d’écriture du journal", keywords: "écrire page jour soir oubli" },
   // Agenda
   { id: "avant-cours", category: "agenda", title: "Rappel avant un cours", keywords: "cours emploi du temps minutes avant prévenir" },
   { id: "devoirs-du-jour", category: "agenda", title: "Résumé des devoirs du jour", keywords: "devoirs heure matin résumé" },
@@ -77,14 +79,18 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { id: "preparer-demain", category: "agenda", title: "Préparer ma journée de demain", keywords: "soir veille lendemain récapitulatif cours devoirs affaires sac rappel" },
   // Apprentissage
   { id: "objectif-quotidien", category: "apprentissage", title: "Objectif quotidien de révision", keywords: "cartes flashcards révisions par jour but série" },
+  { id: "intensite-revisions", category: "apprentissage", title: "Intensité des révisions", keywords: "légère équilibrée intensive répétition espacée rythme fréquence cartes" },
   { id: "jours-repos", category: "apprentissage", title: "Jours de repos", keywords: "pause congé week-end samedi dimanche série streak objectif" },
   { id: "minuteur", category: "apprentissage", title: "Minuteur de concentration", keywords: "pomodoro durée travail pause focus" },
+  { id: "mode-concentration", category: "apprentissage", title: "Mode Concentration", keywords: "focus silence sourdine rappels attente ne pas déranger notifications" },
   // Assistant IA
   { id: "style-ia", category: "assistant", title: "Style d’accompagnement", keywords: "guide équilibré direct explication indices réponse pédagogie apprentissage" },
   { id: "mode-ia", category: "assistant", title: "Mode de réflexion", keywords: "core ultra profondeur raisonnement intelligence" },
   { id: "voix", category: "assistant", title: "Voix de l’assistant", keywords: "vocal nova alloy shimmer parler" },
   { id: "lecture-auto", category: "assistant", title: "Lire les réponses à voix haute", keywords: "lecture automatique audio écouter" },
   { id: "profil-classe", category: "assistant", title: "Ce que l’assistant sait de toi", keywords: "profil d'apprentissage classe niveau préférences matières difficultés personnalisation" },
+  { id: "conservation-conversations", category: "assistant", title: "Conservation des conversations", keywords: "historique discussions 30 jours supprimer garder confidentialité" },
+  { id: "supprimer-historique", category: "assistant", title: "Supprimer l’historique", keywords: "effacer conversations discussions confidentialité" },
   { id: "profil-vider", category: "assistant", title: "Vider mon profil d’apprentissage", keywords: "effacer supprimer profil informations assistant" },
   { id: "bulle", category: "assistant", title: "Bulle de l’assistant", keywords: "rond flottant afficher masquer taille style" },
   { id: "commandes", category: "assistant", title: "Commandes de l’IA", keywords: "raccourcis hashtag # dièse favoris symbole court détaillé longueur" },

@@ -229,10 +229,6 @@ describe("exportAccountData", () => {
         shareMood: true,
       },
     });
-    await prisma.settings.update({
-      where: { userId: student.id },
-      data: { pinLockEnabled: true, pinHash: "un-hash-secret-de-pin" },
-    });
     const tag = await prisma.tag.create({ data: { userId: student.id, name: "maths" } });
     await prisma.entry.create({
       data: { userId: student.id, title: "Journée", content: "Contenu du journal d'Alix.", tags: { connect: [{ id: tag.id }] } },

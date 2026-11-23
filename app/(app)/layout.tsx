@@ -5,8 +5,10 @@ import { BottomNav } from "@/components/BottomNav";
 import { AiOrb } from "@/components/ai/AiOrb";
 import { FocusTimer } from "@/components/learn/FocusTimer";
 import { NotificationScheduler } from "@/components/agenda/NotificationScheduler";
+import { AiHistoryKeeper } from "@/components/ai/AiHistoryKeeper";
+import { toAiRetention } from "@/lib/ai/retention";
 import { StorageScope } from "@/components/StorageScope";
-import { FONT_SIZES } from "@/lib/constants";
+import { readingStyle } from "@/lib/reading";
 
 export default async function AppLayout({
   children,
@@ -19,8 +21,8 @@ export default async function AppLayout({
     where: { userId: user.id },
   });
 
-  const readingSize = FONT_SIZES[settings?.fontSize ?? "base"] ?? "1.0625rem";
-  const style = { "--reading-size": readingSize } as CSSProperties;
+  // Confort de lecture (taille + espacement), appliqué aux zones de lecture.
+  const style: CSSProperties = readingStyle(settings?.fontSize, settings?.lineSpacing);
 
   return (
     // Données locales (agenda, notes, paquets, IA…) : celles de CE compte
@@ -40,6 +42,10 @@ export default async function AppLayout({
         <AiOrb />
         <FocusTimer />
         <NotificationScheduler />
+        <AiHistoryKeeper
+          retention={toAiRetention(settings?.aiRetention)}
+          clearedAt={settings?.aiHistoryClearedAt?.getTime() ?? null}
+        />
       </div>
     </StorageScope>
   );

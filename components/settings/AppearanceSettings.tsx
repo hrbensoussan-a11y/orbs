@@ -2,8 +2,11 @@
 
 // Réglages → Apparence. Mêmes réglages et même stockage qu'avant
 // (lib/appearance : thème, fond, luminosité, animations dans l'espace local
-// du compte ; taille du texte du journal sur le serveur, synchronisée entre
-// appareils), présentés en ligne plutôt que dans une fenêtre.
+// du compte ; taille du texte sur le serveur, synchronisée entre appareils),
+// présentés en ligne plutôt que dans une fenêtre.
+//
+// Lecture (confort, lib/reading) : taille du texte + espacement, appliqués
+// aux zones de lecture seulement (journal, réponses de l'assistant).
 
 import { useEffect, useState, useTransition } from "react";
 import { Check, RotateCcw } from "lucide-react";
@@ -22,7 +25,8 @@ import {
   type Appearance,
 } from "@/lib/appearance";
 import { FONT_SIZES } from "@/lib/constants";
-import { setReadingSize } from "@/app/actions/settings";
+import { setLineSpacing, setReadingSize } from "@/app/actions/settings";
+import { LINE_SPACINGS, readingStyle, toLineSpacing, type LineSpacing } from "@/lib/reading";
 
 /** Aperçu miniature de chaque thème (couleurs du thème, pas de la page). */
 const THEME_PREVIEW: Record<string, { bg: string; bar: string; bar2: string }> = {
@@ -50,13 +54,22 @@ function dimLabel(dim: number): string {
   return "Légèrement atténuée";
 }
 
-export function AppearanceSettings({ initialFontSize }: { initialFontSize: string }) {
+export function AppearanceSettings({
+  initialFontSize,
+  initialLineSpacing,
+}: {
+  initialFontSize: string;
+  initialLineSpacing: string;
+}) {
   const [ap, setAp] = useState<Appearance | null>(null);
   const [reduced, setReduced] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [size, setSize] = useState(initialFontSize in FONT_SIZES ? initialFontSize : "base");
   const [savedSize, setSavedSize] = useState<"idle" | "saved" | "error">("idle");
   const [pending, startTransition] = useTransition();
+  const [spacing, setSpacing] = useState<LineSpacing>(toLineSpacing(initialLineSpacing));
+  const [savedSpacing, setSavedSpacing] = useState<"idle" | "saved" | "error">("idle");
+  const [spacingPending, startSpacing] = useTransition();
 
   useEffect(() => {
     const sync = () => setAp(readAppearance());
@@ -98,6 +111,25 @@ export function AppearanceSettings({ initialFontSize }: { initialFontSize: strin
       } catch {
         setSize(previous);
         setSavedSize("error");
+      }
+    });
+  }
+
+  function changeSpacing(next: LineSpacing) {
+    const previous = spacing;
+    setSpacing(next);
+    setSavedSpacing("idle");
+    startSpacing(async () => {
+      try {
+        const res = await setLineSpacing(next);
+        if (res.ok) setSavedSpacing("saved");
+        else {
+          setSpacing(previous);
+          setSavedSpacing("error");
+        }
+      } catch {
+        setSpacing(previous);
+        setSavedSpacing("error");
       }
     });
   }
@@ -187,12 +219,12 @@ export function AppearanceSettings({ initialFontSize }: { initialFontSize: strin
 
       <SettingsGroup
         title="Lecture"
-        footer="Enregistrée sur ton compte : la même taille sur tous tes appareils."
+        footer="Enregistré sur ton compte : le même confort de lecture sur tous tes appareils. Les boutons et les menus ne changent pas."
       >
         <SettingRow
           id="taille-texte"
-          title="Taille du texte du journal"
-          desc="Pour lire et écrire tes pages plus confortablement."
+          title="Taille du texte"
+          desc="Tes pages du journal et les réponses de l’assistant."
           stack
         >
           <Segmented
@@ -202,18 +234,6 @@ export function AppearanceSettings({ initialFontSize }: { initialFontSize: strin
             label="Taille du texte du journal"
             disabled={pending}
           />
-          <p
-            className="mt-3 rounded-2xl px-4 py-3"
-            style={{
-              fontFamily: "var(--reading-font)",
-              fontSize: FONT_SIZES[size],
-              lineHeight: 1.6,
-              background: "var(--fill)",
-              color: "var(--ink-2)",
-            }}
-          >
-            Aujourd’hui, j’ai enfin compris les fractions.
-          </p>
           <p className="text-xs empty:hidden mt-2" aria-live="polite">
             {savedSize === "saved" && !pending && (
               <span className="st-saved">
@@ -222,6 +242,35 @@ export function AppearanceSettings({ initialFontSize }: { initialFontSize: strin
             )}
             {savedSize === "error" && <span className="text-coral">L’enregistrement a échoué. Réessaie.</span>}
           </p>
+        </SettingRow>
+
+        <SettingRow
+          id="espacement-texte"
+          title="Espacement du texte"
+          desc="L’espace entre les lignes et entre les paragraphes."
+          stack
+        >
+          <Segmented
+            value={spacing}
+            options={LINE_SPACINGS}
+            onChange={changeSpacing}
+            label="Espacement du texte"
+          />
+          <p className="text-xs empty:hidden mt-2" aria-live="polite">
+            {savedSpacing === "saved" && !spacingPending && (
+              <span className="st-saved">
+                <Check size={13} aria-hidden /> Enregistré
+              </span>
+            )}
+            {savedSpacing === "error" && <span className="text-coral">L’enregistrement a échoué. Réessaie.</span>}
+          </p>
+          {/* Aperçu : la même mise en forme que les pages et les réponses. */}
+          <div className="st-reading-preview" style={readingStyle(size, spacing)} aria-label="Aperçu de lecture">
+            <div className="reading">
+              <p>Aujourd’hui, j’ai enfin compris les fractions : il suffit de mettre les deux nombres sur le même dénominateur avant de les additionner.</p>
+              <p>Demain, je refais les exercices 4 et 5 pour vérifier.</p>
+            </div>
+          </div>
         </SettingRow>
       </SettingsGroup>
 
