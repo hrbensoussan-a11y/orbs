@@ -1,21 +1,27 @@
 "use client";
 
-// Planificateur des rappels de l'agenda. Ne rend rien à l'écran : il tourne
-// en tâche de fond tant qu'Orbs est ouvert. À chaque « tick » (et quand on
-// revient sur l'onglet), il vérifie l'agenda et déclenche les rappels dus
-// (cours qui approchent, devoirs du jour) — sonnerie + notification.
+// Planificateur des rappels de l'agenda. Il tourne en tâche de fond tant
+// qu'Orbs est ouvert sur l'appareil — y compris dans un onglet en
+// arrière-plan sur ordinateur. À chaque « tick » (et quand on revient sur
+// l'onglet), il vérifie l'agenda et déclenche les rappels dus (cours qui
+// approchent, devoirs du jour, « Préparer ma journée de demain ») — sonnerie
+// + notification.
 //
-// Les rappels « même app fermée » demandent un serveur (web push) ; ils
-// viendront avec la version en ligne. Ici, tout reste local au premier plan.
+// Plusieurs onglets ouverts : un seul déclenche à la fois (runExclusive, Web
+// Locks), et le suivi « déjà déclenché » est noté avant l'envoi : jamais de
+// doublon. Les rappels quand Orbs est complètement fermé demandent le web
+// push (serveur d'envoi) : voir docs/notifications.md.
 
 import { useEffect } from "react";
 import { loadAgenda } from "@/lib/agenda/store";
 import {
   loadNotifSettings,
+  runExclusive,
   runReminderTick,
   NOTIF_EVENT,
 } from "@/lib/agenda/notifications";
 import { unlockOnGesture } from "@/lib/sound/ringtones";
+import { TomorrowRecap } from "@/components/agenda/TomorrowRecap";
 
 const TICK_MS = 30_000; // on vérifie toutes les 30 s
 
@@ -28,11 +34,15 @@ export function NotificationScheduler() {
     let stopped = false;
 
     function tick() {
-      if (stopped || typeof document === "undefined" || document.hidden) return;
+      if (stopped) return;
       try {
-        const settings = loadNotifSettings();
-        if (!settings.enabled) return;
-        void runReminderTick(loadAgenda(), settings);
+        if (!loadNotifSettings().enabled) return;
+        // Réglages et agenda relus DANS le verrou : l'état le plus récent.
+        void runExclusive(async () => {
+          const settings = loadNotifSettings();
+          if (!settings.enabled) return;
+          await runReminderTick(loadAgenda(), settings);
+        }).catch(() => {});
       } catch {
         /* lecture locale faillible : on ignore */
       }
@@ -59,5 +69,5 @@ export function NotificationScheduler() {
     };
   }, []);
 
-  return null;
+  return <TomorrowRecap />;
 }

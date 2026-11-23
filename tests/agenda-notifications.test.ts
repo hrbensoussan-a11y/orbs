@@ -163,3 +163,35 @@ describe("homeworkSummary", () => {
     expect(homeworkSummary(emptyAgenda(), mondayAt(12, 0))).toBeNull();
   });
 });
+
+describe("Résumé des devoirs le week-end (Réglages → Agenda)", () => {
+  // Samedi 10 et dimanche 11 janvier 2026, 9 h.
+  const saturday = new Date(2026, 0, 10, 9, 0, 0, 0);
+  const sunday = new Date(2026, 0, 11, 9, 0, 0, 0);
+  const due = (d: Date) => agendaWith({ homework: [homework({ due: dateKey(d) })] });
+
+  it("par défaut, le résumé arrive aussi le week-end (comportement d'avant conservé)", () => {
+    expect(defaultNotifSettings().homeworkWeekend).toBe(true);
+    const r = pendingReminders(due(saturday), settings({ courses: false }), saturday, new Set());
+    expect(r.map((x) => x.key)).toEqual(["homework-summary"]);
+  });
+
+  it("désactivé : aucun résumé le samedi ni le dimanche", () => {
+    const s = settings({ courses: false, homeworkWeekend: false });
+    expect(pendingReminders(due(saturday), s, saturday, new Set())).toEqual([]);
+    expect(pendingReminders(due(sunday), s, sunday, new Set())).toEqual([]);
+  });
+
+  it("désactivé : le résumé arrive toujours en semaine", () => {
+    const monday = mondayAt(9, 0);
+    const s = settings({ courses: false, homeworkWeekend: false });
+    expect(pendingReminders(due(monday), s, monday, new Set()).map((x) => x.key)).toEqual(["homework-summary"]);
+  });
+
+  it("n'affecte pas les rappels de cours", () => {
+    // Cours le samedi (jour 5 depuis lundi) : prévenu même sans résumé de devoirs le week-end.
+    const a = agendaWith({ courses: [course({ day: 5, start: "09:10" })] });
+    const r = pendingReminders(a, settings({ homework: false, homeworkWeekend: false, leadMin: 10 }), saturday, new Set());
+    expect(r.map((x) => x.key)).toEqual(["course:c1"]);
+  });
+});

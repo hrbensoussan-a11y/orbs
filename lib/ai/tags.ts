@@ -25,6 +25,7 @@ export const TAG_CATEGORIES = [
   "Vie personnelle & organisation",
   "Modes pédagogiques",
   "Orbs & communication",
+  "Longueur des réponses",
 ] as const;
 
 export const AI_TAGS: AiTag[] = [
@@ -67,10 +68,33 @@ export const AI_TAGS: AiTag[] = [
   { id: "compte", label: "Compte", emoji: "👤", category: TAG_CATEGORIES[3], desc: "Utilise seulement les infos générales utiles du profil (classe, matières, établissement). Jamais d'infos sensibles inutiles." },
   { id: "recherche", label: "Recherche", emoji: "🔍", category: TAG_CATEGORIES[3], desc: "Cherche dans les données locales d'Orbs (Journal, cartes, devoirs, cours, agenda). Ex. « où ai-je parlé des fractions ? »." },
   { id: "orbs", label: "Orbs", emoji: "🟢", category: TAG_CATEGORIES[3], desc: "Contexte global intelligent : choisit seulement les sources Orbs utiles pour répondre, pas tout le compte automatiquement." },
+  // Longueur des réponses : ne vaut que pour la réponse au message qui la
+  // contient (la préférence de l'élève n'est jamais modifiée). Une seule à la
+  // fois : si les deux sont tapées, la dernière l'emporte (resolveLengthTags).
+  // « #détaillé » s'écrit avec ou sans accents (normalizeTag).
+  { id: "court", label: "Court", emoji: "✂️", category: TAG_CATEGORIES[4], desc: "Réponse courte et synthétique : l'essentiel en quelques phrases ou une courte liste, sans introduction ni détour. Pour cette réponse seulement." },
+  { id: "detaille", label: "Détaillé", emoji: "🧾", category: TAG_CATEGORIES[4], desc: "Réponse détaillée : chaque étape expliquée, les termes utiles définis, un exemple, puis un court récapitulatif. Pour cette réponse seulement." },
 ];
 
 export const TAG_BY_ID: Map<string, AiTag> = new Map(AI_TAGS.map((t) => [t.id, t]));
 export const AI_TAG_IDS: Set<string> = new Set(AI_TAGS.map((t) => t.id));
+
+/** Commandes de longueur : une seule s'applique à une réponse. */
+export const LENGTH_TAG_IDS: ReadonlySet<string> = new Set(["court", "detaille"]);
+
+/**
+ * Commandes reconnues d'un message, prêtes pour le prompt : inconnues
+ * écartées, doublons retirés, et une seule commande de longueur gardée (la
+ * dernière tapée) quand l'élève en a mis deux contradictoires.
+ */
+export function resolveLengthTags(tags: readonly string[]): string[] {
+  const known: string[] = [];
+  for (const id of tags) if (TAG_BY_ID.has(id) && !known.includes(id)) known.push(id);
+  const lengths = known.filter((id) => LENGTH_TAG_IDS.has(id));
+  if (lengths.length <= 1) return known;
+  const keep = lengths[lengths.length - 1];
+  return known.filter((id) => !LENGTH_TAG_IDS.has(id) || id === keep);
+}
 
 /** Minuscule + sans accents, pour comparer « é » et « e ». */
 export function normalizeTag(s: string): string {

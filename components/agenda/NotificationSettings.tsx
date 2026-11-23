@@ -1,65 +1,80 @@
 "use client";
 
-// Réglages des notifications de l'agenda :
-// - interrupteur général (demande la permission du navigateur),
-// - choix de la sonnerie (avec aperçu à l'écoute),
-// - volume,
-// - rappel avant les cours (+ combien de temps avant),
-// - résumé des devoirs (+ heure),
-// - bouton « Tester ».
-// Tout est stocké en local et appliqué en direct (événement orbs:notif).
+// Réglages des rappels de l'agenda, répartis en deux catégories des Réglages :
+//   - Notifications : interrupteur général (demande la permission du
+//     navigateur), sonnerie avec aperçu, volume, « Tester le rappel » ;
+//   - Agenda : rappel avant les cours (+ délai), résumé des devoirs (+ heure,
+//     + week-end), et le soir « Préparer ma journée de demain » (+ heure,
+//     + aperçu du récapitulatif réel).
+// Une seule source : lib/agenda/notifications (espace local du compte). Les
+// deux écrans restent synchronisés par l'événement NOTIF_EVENT, émis à chaque
+// enregistrement et déjà écouté par le planificateur des rappels.
 
-import { useEffect, useState } from "react";
-import { Bell, BellOff, Play, Volume2, CalendarClock, CalendarCheck } from "lucide-react";
-import { RINGTONES } from "@/lib/sound/ringtones";
-import { playRingtone, unlockOnGesture } from "@/lib/sound/ringtones";
+import { useCallback, useEffect, useState } from "react";
+import { BellOff, BellRing, CalendarCheck, CalendarClock, CalendarDays, CalendarOff, Eye, MoonStar, Music2, Play, Volume1, Volume2 } from "lucide-react";
+import { RINGTONES, playRingtone, unlockOnGesture } from "@/lib/sound/ringtones";
 import {
-  loadNotifSettings,
-  saveNotifSettings,
-  requestNotifPermission,
-  notifPermission,
-  fireNotification,
-  defaultNotifSettings,
   LEAD_CHOICES,
-  type NotifSettings,
+  NOTIF_EVENT,
+  defaultNotifSettings,
+  TOMORROW_KEY,
+  fireNotification,
+  loadNotifSettings,
+  markReminderFired,
+  notifPermission,
+  reminderFiredToday,
+  requestNotifPermission,
+  saveNotifSettings,
   type NotifPermission,
+  type NotifSettings,
 } from "@/lib/agenda/notifications";
+import { OptionTile, SettingJump, SettingRow, SettingsGroup, Switch } from "@/components/settings/controls";
+import { openTomorrowRecap } from "@/components/agenda/TomorrowRecap";
 
-export function NotificationSettings() {
+function useNotifSettings() {
   const [s, setS] = useState<NotifSettings | null>(null);
   const [perm, setPerm] = useState<NotifPermission>("default");
 
   useEffect(() => {
     unlockOnGesture();
+    const sync = () => setS(loadNotifSettings());
     /* eslint-disable react-hooks/set-state-in-effect */
-    setS(loadNotifSettings());
+    sync();
     setPerm(notifPermission());
     /* eslint-enable react-hooks/set-state-in-effect */
+    window.addEventListener(NOTIF_EVENT, sync);
+    return () => window.removeEventListener(NOTIF_EVENT, sync);
   }, []);
 
-  function patch(next: Partial<NotifSettings>) {
+  const patch = useCallback((next: Partial<NotifSettings>) => {
     setS((prev) => {
       const merged = { ...(prev ?? defaultNotifSettings()), ...next };
-      saveNotifSettings(merged);
+      // Hors du rendu : l'événement émis met à jour l'autre écran.
+      queueMicrotask(() => saveNotifSettings(merged));
       return merged;
     });
-  }
+  }, []);
 
-  async function toggleEnabled() {
-    if (!s) return;
-    const next = !s.enabled;
-    if (next) {
-      const p = await requestNotifPermission();
-      setPerm(p);
-    }
+  return { s, perm, setPerm, patch };
+}
+
+// ---------------------------------------------------------------------------
+// Notifications : activation, sonnerie, volume, test
+// ---------------------------------------------------------------------------
+
+export function NotificationGeneralSettings() {
+  const { s, perm, setPerm, patch } = useNotifSettings();
+
+  if (!s) return <div className="h-40" aria-hidden />;
+
+  async function toggleEnabled(next: boolean) {
+    if (next) setPerm(await requestNotifPermission());
     patch({ enabled: next });
   }
-
-  function previewSound(id: string) {
+  function preview(id: string) {
     unlockOnGesture();
     playRingtone(id, s?.volume ?? 0.7).catch(() => {});
   }
-
   async function test() {
     if (!s) return;
     await fireNotification(
@@ -70,217 +85,283 @@ export function NotificationSettings() {
     );
   }
 
-  if (!s) return <div className="h-10" aria-hidden />;
-
-  const dim = s.enabled ? "" : "opacity-50 pointer-events-none";
+  const off = !s.enabled;
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Interrupteur général */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span
-            className="grid place-items-center h-10 w-10 rounded-full shrink-0"
-            style={{
-              background: s.enabled
-                ? "color-mix(in srgb, var(--green) 16%, transparent)"
-                : "color-mix(in srgb, var(--ink-3) 16%, transparent)",
-              color: s.enabled ? "var(--green-ink)" : "var(--ink-3)",
-            }}
-          >
-            {s.enabled ? <Bell size={18} aria-hidden /> : <BellOff size={18} aria-hidden />}
-          </span>
-          <div>
-            <p className="font-medium leading-snug">Rappels de l’agenda</p>
-            <p className="text-sm text-ink-3 leading-snug">
-              Cours qui approchent et devoirs du jour, avec une sonnerie.
+    <>
+      <SettingsGroup
+        footer="Les rappels sonnent quand Orbs est ouvert sur cet appareil. Ces réglages sont propres à cet appareil."
+      >
+        <SettingRow
+          id="rappels"
+          icon={<BellRing size={17} />}
+          title="Activer les rappels"
+          desc="Cours qui approchent et devoirs du jour, avec une sonnerie."
+        >
+          <Switch checked={s.enabled} onChange={toggleEnabled} label="Activer les rappels" />
+        </SettingRow>
+        {perm === "denied" && (
+          <div className="st-row">
+            <p className="st-note st-note--warn">
+              <BellOff size={17} aria-hidden />
+              <span>
+                Les notifications sont bloquées par le navigateur. Autorise-les dans ses réglages pour
+                voir les rappels à l’écran ; la sonnerie, elle, joue quand Orbs est ouvert.
+              </span>
             </p>
           </div>
-        </div>
-        <Toggle checked={s.enabled} onChange={toggleEnabled} label="Activer les rappels" />
-      </div>
+        )}
+        {perm === "unsupported" && s.enabled && (
+          <div className="st-row">
+            <p className="st-note st-note--info">
+              <BellRing size={17} aria-hidden />
+              <span>Ce navigateur n’affiche pas de notifications. La sonnerie jouera quand Orbs est ouvert.</span>
+            </p>
+          </div>
+        )}
+      </SettingsGroup>
 
-      {perm === "denied" && (
-        <p className="text-sm text-coral">
-          Les notifications sont bloquées par le navigateur. Autorise-les dans
-          ses réglages pour voir les rappels à l’écran (la sonnerie, elle, joue
-          quand Orbs est ouvert).
-        </p>
-      )}
-      {perm === "unsupported" && s.enabled && (
-        <p className="text-sm text-ink-3">
-          Ce navigateur n’affiche pas de notifications. La sonnerie jouera quand
-          Orbs est ouvert.
-        </p>
-      )}
-
-      {/* Sonnerie */}
-      <div className={`flex flex-col gap-2.5 ${dim}`}>
-        <span className="font-medium">Sonnerie</span>
-        <div className="grid grid-cols-2 gap-2">
-          {RINGTONES.map((r) => {
-            const on = s.sound === r.id;
-            return (
-              <button
+      <SettingsGroup title="Son">
+        <SettingRow id="sonnerie" title="Sonnerie" desc="Touche une sonnerie pour l’écouter." stack disabled={off}>
+          <div className="st-tiles" role="radiogroup" aria-label="Sonnerie" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(132px, 1fr))" }}>
+            {RINGTONES.map((r) => (
+              <OptionTile
                 key={r.id}
-                onClick={() => {
+                selected={s.sound === r.id}
+                onSelect={() => {
                   patch({ sound: r.id });
-                  previewSound(r.id);
+                  preview(r.id);
                 }}
-                className="flex items-center gap-2.5 rounded-[var(--r-inner)] px-3 py-2.5 text-left transition"
-                style={{
-                  border: on
-                    ? "1.5px solid var(--green)"
-                    : "1.5px solid var(--glass-stroke)",
-                  background: on
-                    ? "color-mix(in srgb, var(--green) 10%, transparent)"
-                    : "transparent",
-                }}
-                aria-pressed={on}
+                label={r.name}
+                disabled={off}
+                className="!flex-row !items-center !gap-2.5 !py-2.5"
               >
                 <span className="text-xl leading-none" aria-hidden>
                   {r.emoji}
                 </span>
-                <span className="flex-1 font-medium text-sm">{r.name}</span>
-                {r.id !== "silence" && (
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      previewSound(r.id);
-                    }}
-                    className="grid place-items-center h-7 w-7 rounded-full shrink-0"
-                    style={{ color: "var(--ink-3)" }}
-                    aria-hidden
-                  >
-                    <Play size={13} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Volume */}
-      <div className={`flex items-center gap-3 ${dim}`}>
-        <Volume2 size={18} className="text-ink-2 shrink-0" aria-hidden />
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(s.volume * 100)}
-          onChange={(e) => patch({ volume: Number(e.target.value) / 100 })}
-          onMouseUp={() => previewSound(s.sound)}
-          onTouchEnd={() => previewSound(s.sound)}
-          className="flex-1 accent-[var(--green)]"
-          aria-label="Volume de la sonnerie"
-        />
-        <span className="text-sm text-ink-3 w-10 text-right tabular-nums">
-          {Math.round(s.volume * 100)}%
-        </span>
-      </div>
-
-      {/* Rappel avant les cours */}
-      <div className={`flex flex-col gap-3 border-t border-line pt-4 ${dim}`}>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CalendarClock size={18} className="text-ink-2 shrink-0" aria-hidden />
-            <span className="font-medium">Avant un cours</span>
+                <span className="st-tile-label">{r.name}</span>
+              </OptionTile>
+            ))}
           </div>
-          <Toggle
-            checked={s.courses}
-            onChange={() => patch({ courses: !s.courses })}
-            label="Prévenir avant les cours"
-          />
+        </SettingRow>
+
+        <SettingRow id="volume" title="Volume" stack disabled={off}>
+          <div className="flex items-center gap-3">
+            <Volume1 size={18} className="shrink-0" style={{ color: "var(--st-desc)" }} aria-hidden />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(s.volume * 100)}
+              onChange={(e) => patch({ volume: Number(e.target.value) / 100 })}
+              onMouseUp={() => preview(s.sound)}
+              onTouchEnd={() => preview(s.sound)}
+              onKeyUp={() => preview(s.sound)}
+              className="st-range"
+              style={{ "--p": `${Math.round(s.volume * 100)}%` } as React.CSSProperties}
+              aria-label="Volume de la sonnerie"
+              disabled={off}
+            />
+            <Volume2 size={18} className="shrink-0" style={{ color: "var(--st-desc)" }} aria-hidden />
+            <span className="st-value">{Math.round(s.volume * 100)} %</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow
+          id="tester-rappel"
+          title="Tester le rappel"
+          desc="Joue la sonnerie et affiche une notification d’essai."
+          disabled={off}
+        >
+          <button type="button" className="btn-ghost" onClick={test} disabled={off}>
+            <Play size={14} aria-hidden /> Tester
+          </button>
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingJump
+        category="agenda"
+        icon={<CalendarDays size={16} />}
+        title="Quand être prévenu·e"
+        desc="Rappels avant les cours et résumé des devoirs, dans Agenda."
+      />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agenda : quels rappels, et quand
+// ---------------------------------------------------------------------------
+
+/** Ouvre la catégorie Notifications des Réglages (sans recharger la page). */
+function openNotifications() {
+  window.history.pushState(null, "", "/settings?c=notifications");
+  window.scrollTo({ top: 0 });
+}
+
+function minutesOf(hm: string): number {
+  const [h, m] = hm.split(":");
+  return (Number(h) || 0) * 60 + (Number(m) || 0);
+}
+
+function isPastToday(hm: string): boolean {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes() >= minutesOf(hm);
+}
+
+/** « Prochain récapitulatif : aujourd’hui à 20:00… » (ou demain). */
+function tomorrowHint(s: NotifSettings): string {
+  const today = !isPastToday(s.tomorrowTime) && !reminderFiredToday(TOMORROW_KEY);
+  return `Prochain : ${today ? "aujourd’hui" : "demain"} à ${s.tomorrowTime}, s’il y a un cours ou un devoir à rendre le lendemain.`;
+}
+
+export function AgendaReminderSettings() {
+  const { s, patch } = useNotifSettings();
+  const [hint, setHint] = useState("");
+
+  // L'indication « prochain récapitulatif » dépend de l'heure actuelle : elle
+  // est recalculée à chaque changement du réglage, hors du rendu.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (s?.tomorrow) setHint(tomorrowHint(s));
+  }, [s]);
+
+  if (!s) return <div className="h-40" aria-hidden />;
+  const off = !s.enabled;
+
+  /**
+   * Activer le rappel (ou changer son heure) après l'heure du jour : il ne
+   * part pas tout de suite, il commence le lendemain — pas de notification
+   * surprise juste après avoir touché au réglage. L'aperçu reste disponible.
+   */
+  function changeTomorrow(next: Partial<Pick<NotifSettings, "tomorrow" | "tomorrowTime">>) {
+    if (!s) return;
+    const merged = { ...s, ...next };
+    if (merged.tomorrow && isPastToday(merged.tomorrowTime)) markReminderFired(TOMORROW_KEY);
+    patch(next);
+  }
+
+  return (
+    <>
+      {off && (
+        <div className="st-note st-note--info">
+          <CalendarOff size={17} className="shrink-0 mt-0.5" aria-hidden />
+          <span>
+            Les rappels sont désactivés : ces réglages s’appliqueront dès que tu les activeras.{" "}
+            <button type="button" className="st-link-btn" onClick={openNotifications}>
+              Activer les rappels
+            </button>
+          </span>
         </div>
+      )}
+
+      <SettingsGroup title="Cours">
+        <SettingRow
+          id="avant-cours"
+          icon={<CalendarClock size={17} />}
+          title="Rappel avant un cours"
+          desc="Pour ne pas arriver en retard, d’après ton emploi du temps."
+        >
+          <Switch checked={s.courses} onChange={(v) => patch({ courses: v })} label="Prévenir avant les cours" />
+        </SettingRow>
         {s.courses && (
-          <label className="flex items-center justify-between gap-3 pl-7">
-            <span className="text-sm text-ink-2">Me prévenir</span>
+          <SettingRow title="Me prévenir">
             <select
-              className="input max-w-44"
+              className="st-select"
               value={s.leadMin}
               onChange={(e) => patch({ leadMin: Number(e.target.value) })}
               aria-label="Délai avant le cours"
             >
               {LEAD_CHOICES.map((m) => (
                 <option key={m} value={m}>
-                  {m === 0 ? "À l’heure du cours" : `${m} min avant`}
+                  {m === 0 ? "À l’heure du cours" : m === 60 ? "1 h avant" : `${m} min avant`}
                 </option>
               ))}
             </select>
-          </label>
+          </SettingRow>
         )}
-      </div>
+      </SettingsGroup>
 
-      {/* Résumé des devoirs */}
-      <div className={`flex flex-col gap-3 border-t border-line pt-4 ${dim}`}>
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <CalendarCheck size={18} className="text-ink-2 shrink-0" aria-hidden />
-            <span className="font-medium">Devoirs du jour</span>
-          </div>
-          <Toggle
-            checked={s.homework}
-            onChange={() => patch({ homework: !s.homework })}
-            label="Résumé des devoirs"
-          />
-        </div>
+      <SettingsGroup title="Devoirs">
+        <SettingRow
+          id="devoirs-du-jour"
+          icon={<CalendarCheck size={17} />}
+          title="Résumé des devoirs du jour"
+          desc="Une fois par jour : devoirs en retard, pour aujourd’hui ou demain."
+        >
+          <Switch checked={s.homework} onChange={(v) => patch({ homework: v })} label="Résumé des devoirs" />
+        </SettingRow>
         {s.homework && (
-          <label className="flex items-center justify-between gap-3 pl-7">
-            <span className="text-sm text-ink-2">Chaque jour à</span>
-            <input
-              type="time"
-              className="input max-w-32"
-              value={s.homeworkTime}
-              onChange={(e) => patch({ homeworkTime: e.target.value })}
-              aria-label="Heure du résumé des devoirs"
-            />
-          </label>
+          <>
+            <SettingRow title="Chaque jour à">
+              <input
+                type="time"
+                className="st-time"
+                value={s.homeworkTime}
+                onChange={(e) => e.target.value && patch({ homeworkTime: e.target.value })}
+                aria-label="Heure du résumé des devoirs"
+              />
+            </SettingRow>
+            <SettingRow
+              id="devoirs-week-end"
+              title="Aussi le week-end"
+              desc="Désactive-le pour profiter de ton samedi et de ton dimanche."
+            >
+              <Switch
+                checked={s.homeworkWeekend}
+                onChange={(v) => patch({ homeworkWeekend: v })}
+                label="Résumé des devoirs le week-end"
+              />
+            </SettingRow>
+          </>
         )}
-      </div>
+      </SettingsGroup>
 
-      {/* Test */}
-      <div className={`border-t border-line pt-4 ${dim}`}>
-        <button className="btn-ghost w-full justify-center" onClick={test}>
-          <Play size={15} aria-hidden /> Tester le rappel
-        </button>
-      </div>
-    </div>
-  );
-}
+      <SettingsGroup
+        title="Le soir"
+        footer="Seulement s’il y a un cours ou un devoir à rendre le lendemain. Le rappel sonne si Orbs est ouvert sur cet appareil, même dans un onglet en arrière-plan sur ordinateur ; sinon, le récapitulatif t’attend à ta prochaine ouverture d’Orbs, jusqu’à minuit."
+      >
+        <SettingRow
+          id="preparer-demain"
+          icon={<MoonStar size={17} />}
+          title="Préparer ma journée de demain"
+          desc="Chaque soir, un récapitulatif de tes cours, de tes devoirs et de tes affaires pour le lendemain."
+        >
+          <Switch
+            checked={s.tomorrow}
+            onChange={(v) => changeTomorrow({ tomorrow: v })}
+            label="Préparer ma journée de demain"
+          />
+        </SettingRow>
+        {s.tomorrow && (
+          <>
+            <SettingRow title="Chaque soir à" desc={hint}>
+              <input
+                type="time"
+                className="st-time"
+                value={s.tomorrowTime}
+                onChange={(e) => e.target.value && changeTomorrow({ tomorrowTime: e.target.value })}
+                aria-label="Heure du récapitulatif du soir"
+              />
+            </SettingRow>
+            <SettingRow
+              title="Voir le récapitulatif"
+              desc="Avec ce qui est prévu demain dans ton agenda, en ce moment."
+            >
+              <button type="button" className="btn-ghost" onClick={openTomorrowRecap}>
+                <Eye size={15} aria-hidden /> Aperçu
+              </button>
+            </SettingRow>
+          </>
+        )}
+      </SettingsGroup>
 
-/* Petit interrupteur accessible (role="switch"). */
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onChange}
-      className="relative shrink-0 rounded-full transition-colors"
-      style={{
-        width: 46,
-        height: 28,
-        background: checked ? "var(--green)" : "color-mix(in srgb, var(--ink-3) 35%, transparent)",
-      }}
-    >
-      <span
-        className="absolute top-1 rounded-full bg-white transition-all"
-        style={{
-          width: 20,
-          height: 20,
-          left: checked ? 22 : 4,
-          boxShadow: "0 1px 3px rgba(0,0,0,.2)",
-        }}
+      <SettingJump
+        category="notifications"
+        icon={<Music2 size={16} />}
+        title="Sonnerie et volume"
+        desc="Le son de tes rappels, dans Notifications."
       />
-    </button>
+    </>
   );
 }

@@ -12,6 +12,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { AI_CONFIG, aiConfigured, resolveMode } from "@/lib/ai/config";
 import { buildSystemPrompt, buildContextBlock } from "@/lib/ai/persona";
+import { loadAiPreferences } from "@/lib/ai/preferences";
 import { checkRateLimit } from "@/lib/ai/ratelimit";
 import { streamChatCompletion, AiError } from "@/lib/ai/openai";
 import { AUDIO_MODE_ID, toModeId } from "@/lib/ai/modes";
@@ -115,7 +116,13 @@ export async function POST(request: NextRequest) {
   const op = chatOpForEngine(engine);
 
   // 4) Abonnement + crédits : droits de l'offre, moteur autorisé, solde.
-  const billing = await getBillingState(user.id);
+  //    En même temps : préférences de l'assistant ENREGISTRÉES sur le compte
+  //    (style d'accompagnement, profil d'apprentissage). Jamais lues depuis la
+  //    requête : le navigateur ne peut ni les forcer ni lire celles d'un autre.
+  const [billing, prefs] = await Promise.all([
+    getBillingState(user.id),
+    loadAiPreferences(user.id),
+  ]);
 
   // 4a) Limitation du débit (selon l'offre de l'utilisateur).
   const rate = checkRateLimit(user.id, {
@@ -141,10 +148,14 @@ export async function POST(request: NextRequest) {
 
   // 5) Construction du contexte (nécessaire pour estimer la taille d'entrée).
   const system = buildSystemPrompt(
-    { firstName: user.firstName || user.name, schoolClass: user.schoolClass },
+    {
+      firstName: user.firstName || user.name,
+      schoolClass: user.schoolClass,
+      learning: prefs.learning,
+    },
     action,
     tags,
-    { voice },
+    { voice, style: prefs.style },
   );
   const contextBlock = buildContextBlock(context);
 

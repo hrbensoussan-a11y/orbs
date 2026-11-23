@@ -1,6 +1,7 @@
 // Progression / motivation (spec §7).
 import type { State, Stats } from "./types";
 import { mastery } from "./sm2";
+import { isRestDay, streakContinues } from "./rest";
 
 export const XP = { correct: 10, attempt: 3, focus: 25 };
 
@@ -9,11 +10,6 @@ export function dateKey(d: Date = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
-}
-function yesterdayKey(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return dateKey(d);
 }
 
 /** XP cumulée nécessaire pour atteindre le début du niveau L (L≥1). */
@@ -33,10 +29,16 @@ export function levelProgress(xp: number): number {
   return hi > lo ? (xp - lo) / (hi - lo) : 0;
 }
 
-function touchDay(stats: Stats): void {
-  const today = dateKey();
+/**
+ * Note une action d'étude aujourd'hui. La série continue si le dernier jour
+ * actif était hier — ou avant-hier, etc., quand tous les jours entre les deux
+ * sont des jours de repos choisis par l'élève : un jour de repos sans
+ * révision ne casse jamais la série.
+ */
+export function touchDay(stats: Stats, restDays: readonly number[] = [], now: Date = new Date()): void {
+  const today = dateKey(now);
   if (stats.lastDay !== today) {
-    stats.streak = stats.lastDay === yesterdayKey() ? stats.streak + 1 : 1;
+    stats.streak = streakContinues(stats.lastDay, now, restDays) ? stats.streak + 1 : 1;
     stats.lastDay = today;
   }
   stats.journal[today] = (stats.journal[today] || 0) + 1;
@@ -50,7 +52,7 @@ export function award(
   const before = levelFromXp(state.stats.xp);
   state.stats.xp += XP[kind];
   if (kind !== "focus") state.stats.reviews += 1;
-  touchDay(state.stats);
+  touchDay(state.stats, state.settings.restDays);
   const after = levelFromXp(state.stats.xp);
   return { leveledFrom: after > before ? before : null };
 }
@@ -60,6 +62,10 @@ export function dailyProgress(state: State): number {
 }
 export function goalReached(state: State): boolean {
   return dailyProgress(state) >= state.settings.dailyGoal;
+}
+/** Aujourd'hui est un jour de repos : pas d'objectif imposé. */
+export function restToday(state: State, now: Date = new Date()): boolean {
+  return isRestDay(state.settings.restDays, now);
 }
 export function activeDays(stats: Stats): number {
   return Object.keys(stats.journal).length;

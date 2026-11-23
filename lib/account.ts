@@ -14,6 +14,8 @@
 // Aucune de ces fonctions n'ÉCRIT chez Stripe ni ne touche aux webhooks ou
 // aux règles de crédits : la vérification Stripe est en lecture seule.
 
+import { styleLabel, toAiStyle } from "@/lib/ai/style";
+import { parseLearningProfile, profileForExport } from "@/lib/ai/learningProfile";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { isProAccountEmail } from "./proAccess";
@@ -67,6 +69,8 @@ export type AccountExport = {
     heureRappel: string | null;
     frequenceRappel: string | null;
     objectifSerie: number | null;
+    styleAssistant: string;
+    profilApprentissage: ReturnType<typeof profileForExport>;
   } | null;
   journal: {
     entrees: unknown[];
@@ -171,6 +175,8 @@ export async function exportAccountData(userId: string): Promise<AccountExport> 
           heureRappel: user.settings.reminderTime,
           frequenceRappel: user.settings.reminderFrequency,
           objectifSerie: user.settings.streakGoal,
+          styleAssistant: styleLabel(toAiStyle(user.settings.aiStyle)),
+          profilApprentissage: profileForExport(parseLearningProfile(user.settings.learningProfile)),
           // pinHash volontairement exclu : c'est un moyen d'authentification.
         }
       : null,

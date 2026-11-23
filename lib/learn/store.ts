@@ -3,6 +3,7 @@
 import type { Card, Deck, Kind, State } from "./types";
 import { KIND_META } from "./types";
 import { readUserItem, writeUserItem } from "@/lib/userStorage";
+import { sanitizeRestDays } from "./rest";
 
 export const STORAGE_KEY = "orbs.learn.v1";
 const VERSION = 1;
@@ -11,7 +12,7 @@ export function defaultState(): State {
   return {
     version: VERSION,
     decks: {},
-    settings: { dailyGoal: 20 },
+    settings: { dailyGoal: 20, restDays: [] },
     stats: {
       xp: 0,
       streak: 0,
@@ -100,6 +101,7 @@ export function heal(raw: unknown): State {
       decks,
       settings: {
         dailyGoal: num(s.settings?.dailyGoal, base.settings.dailyGoal),
+        restDays: sanitizeRestDays(s.settings?.restDays),
       },
       stats: {
         xp: num(s.stats?.xp, 0),

@@ -10,8 +10,10 @@ import {
   BellRing,
   ChevronRight,
   Check,
+  Leaf,
 } from "lucide-react";
 import { load as loadLearn } from "@/lib/learn/store";
+import { restToday } from "@/lib/learn/progress";
 import { dueCount } from "@/lib/learn/sm2";
 import { loadAgenda, dateKey } from "@/lib/agenda/store";
 import {
@@ -40,12 +42,21 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
   useEffect(() => {
     const list: Reminder[] = [];
 
-    // Révisions dues (module Apprendre)
+    // Révisions dues (module Apprendre). Un jour de repos choisi par l'élève,
+    // pas d'injonction : les cartes peuvent attendre demain.
     try {
       const learn = loadLearn();
       let due = 0;
       for (const d of Object.values(learn.decks)) due += dueCount(d);
-      if (due > 0)
+      if (due > 0 && restToday(learn))
+        list.push({
+          key: "revisions",
+          href: "/apprendre",
+          Icon: Leaf,
+          label: `Jour de repos : tes ${due} carte${due > 1 ? "s" : ""} peuvent attendre demain`,
+          tone: "var(--green)",
+        });
+      else if (due > 0)
         list.push({
           key: "revisions",
           href: "/apprendre",
@@ -143,7 +154,7 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
           </button>
         ) : (
           <Link
-            href="/settings"
+            href="/settings?c=notifications"
             className="chip inline-flex items-center gap-1"
             style={{ color: "var(--green-ink)" }}
           >
@@ -157,7 +168,7 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
           <Check size={16} className="text-green-ink" aria-hidden /> Tout est à jour, bravo !
         </p>
       ) : (
-        <div className="flex flex-col divide-y divide-[var(--line)]">
+        <div className="flex flex-col divide-y divide-line">
           {reminders.map((r) => (
             <Link
               key={r.key}
@@ -186,7 +197,7 @@ export function RappelsCard({ wroteToday }: { wroteToday: boolean }) {
             ? "Les notifications sont bloquées par le navigateur, mais la sonnerie joue quand Orbs est ouvert. "
             : "Les rappels arrivent avec leur sonnerie quand Orbs est ouvert. "}
           Choisis ta sonnerie dans les{" "}
-          <Link href="/settings" className="underline">
+          <Link href="/settings?c=notifications" className="underline">
             réglages
           </Link>
           .

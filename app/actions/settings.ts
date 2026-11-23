@@ -34,3 +34,25 @@ export async function updateSettings(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
   redirect("/settings");
 }
+
+export type ReadingSizeResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Taille du texte du journal, enregistrée dès qu'on la choisit (Réglages →
+ * Apparence). Même donnée que `updateSettings` (Settings.fontSize, synchronisée
+ * entre les appareils), sans rechargement ni redirection : le layout relit la
+ * valeur après revalidation et l'applique partout.
+ */
+export async function setReadingSize(size: string): Promise<ReadingSizeResult> {
+  const user = await requireUser();
+  if (!["sm", "base", "lg"].includes(size)) {
+    return { ok: false, error: "Taille inconnue." };
+  }
+  await prisma.settings.upsert({
+    where: { userId: user.id },
+    update: { fontSize: size },
+    create: { userId: user.id, fontSize: size },
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

@@ -15,15 +15,12 @@ import {
   awardFocusSession,
   fmtMs,
   FOCUS_OPEN_EVENT,
+  FOCUS_PRESETS as PRESETS,
+  FOCUS_TIMES_EVENT,
   type FocusState,
+  type FocusTimes,
 } from "@/lib/learn/focus";
 import { dateKey } from "@/lib/learn/progress";
-
-const PRESETS: [number, number][] = [
-  [25, 5],
-  [50, 10],
-  [15, 3],
-];
 const clamp = (v: number, max: number, def: number) =>
   Number.isFinite(v) && v >= 1 ? Math.min(max, Math.round(v)) : def;
 
@@ -140,6 +137,16 @@ export function FocusTimer() {
     },
     [commit],
   );
+
+  // Durées choisies depuis les Réglages (Apprentissage).
+  useEffect(() => {
+    const onTimes = (e: Event) => {
+      const d = (e as CustomEvent<FocusTimes>).detail;
+      if (d) setTimes(Number(d.workMin), Number(d.breakMin));
+    };
+    window.addEventListener(FOCUS_TIMES_EVENT, onTimes);
+    return () => window.removeEventListener(FOCUS_TIMES_EVENT, onTimes);
+  }, [setTimes]);
 
   if (!st) return null;
   const isWork = st.phase === "work";

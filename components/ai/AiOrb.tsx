@@ -21,6 +21,21 @@ type StyleKey = (typeof STYLE_KEYS)[number];
 type Prefs = { hidden: boolean; size: SizeKey; style: StyleKey };
 
 const EDGE = 8; // marge minimale avec les bords
+const NAV_GAP = 12; // espace gardé au-dessus de la barre de navigation (téléphone)
+
+/**
+ * Limite basse de la bulle. Sur téléphone, la barre de navigation flotte en
+ * bas de l'écran (et remonte avec la zone de sécurité de l'iPhone) : la bulle
+ * reste juste au-dessus pour ne jamais recouvrir ses boutons. Ailleurs (barre
+ * latérale), c'est le bas de l'écran.
+ */
+function bottomLimit(): number {
+  if (window.innerWidth < 768) {
+    const r = document.querySelector(".bottom-nav")?.getBoundingClientRect();
+    if (r && r.height > 0) return r.top - NAV_GAP;
+  }
+  return window.innerHeight - EDGE;
+}
 const DRAG_THRESHOLD = 6; // px avant de considérer que c'est un déplacement
 const POS_KEY = "orbs.aiorb.pos";
 const PREFS_KEY = "orbs.aiorb.prefs";
@@ -59,7 +74,7 @@ export function AiOrb() {
   const clamp = useCallback((p: Pos): Pos => {
     const size = SIZES[prefsRef.current.size];
     const maxX = window.innerWidth - size - EDGE;
-    const maxY = window.innerHeight - size - EDGE;
+    const maxY = bottomLimit() - size;
     return {
       x: Math.max(EDGE, Math.min(p.x, Math.max(EDGE, maxX))),
       y: Math.max(EDGE, Math.min(p.y, Math.max(EDGE, maxY))),
@@ -93,14 +108,15 @@ export function AiOrb() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPrefs(p);
     // Position par défaut (si rien de mémorisé) adaptée à la mise en page :
-    // - téléphone (barre centrale en bas) : en bas à gauche, au-dessus de la barre ;
+    // - téléphone (barre centrale en bas) : en bas à gauche, juste au-dessus
+    //   de la barre, quelle que soit la zone de sécurité de l'appareil ;
     // - tablette / bureau (barre latérale à gauche) : en bas à droite, pour ne
     //   pas recouvrir la navigation.
     const sidebar = window.innerWidth >= 768;
     const orbSize = SIZES[p.size];
     const defaultPos = sidebar
       ? { x: window.innerWidth - orbSize - (EDGE + 16), y: window.innerHeight - orbSize - 24 }
-      : { x: EDGE + 6, y: window.innerHeight - orbSize - 96 };
+      : { x: EDGE + 6, y: bottomLimit() - orbSize };
     place(initial ?? defaultPos);
   }, [place]);
 

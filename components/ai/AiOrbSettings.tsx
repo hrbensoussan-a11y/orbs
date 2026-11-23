@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { OptionTile, Segmented, SettingRow, SettingsGroup, Switch } from "@/components/settings/controls";
 import { readUserItem, writeUserItem } from "@/lib/userStorage";
 
 const PREFS_KEY = "orbs.aiorb.prefs";
@@ -82,104 +83,63 @@ export function AiOrbSettings() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Afficher / enlever */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p>Afficher la bulle</p>
-          <p className="text-sm text-ink-2">Le petit rond qui ouvre l’IA sur toutes les pages.</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={show}
-          aria-label="Afficher la bulle IA"
-          onClick={() => {
-            if (show) setConfirmHide(true);
-            else changeShow(true);
-          }}
-          className="relative h-8 w-14 flex-none rounded-full transition-colors"
-          style={{ background: show ? "var(--green)" : "color-mix(in srgb, var(--ink-3) 40%, transparent)" }}
+    <>
+      <SettingsGroup title="Bulle de l’assistant">
+        <SettingRow
+          id="bulle"
+          title="Afficher la bulle"
+          desc="Le petit rond qui ouvre l’assistant sur toutes les pages."
         >
-          <span
-            className="absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all"
-            style={{ left: show ? "26px" : "4px" }}
+          <Switch
+            checked={show}
+            onChange={(next) => {
+              if (!next) setConfirmHide(true);
+              else changeShow(true);
+            }}
+            label="Afficher la bulle IA"
           />
-        </button>
-      </div>
+        </SettingRow>
 
-      {/* Taille */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-line pt-4">
-        <div className="min-w-0">
-          <p>Taille</p>
-          <p className="text-sm text-ink-2">Agrandis ou réduis la bulle.</p>
-        </div>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Taille de la bulle IA">
-          {SIZE_LABELS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              aria-pressed={size === s.key}
-              onClick={() => changeSize(s.key)}
-              disabled={!show}
-              className="chip"
-              style={
-                size === s.key
-                  ? { background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--green-ink)", cursor: "pointer", opacity: show ? 1 : 0.5 }
-                  : { cursor: "pointer", opacity: show ? 1 : 0.5 }
-              }
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
+        <SettingRow title="Taille" disabled={!show}>
+          <Segmented
+            value={size}
+            options={SIZE_LABELS.map((s) => ({ value: s.key, label: s.label }))}
+            onChange={changeSize}
+            label="Taille de la bulle IA"
+            disabled={!show}
+          />
+        </SettingRow>
 
-      {/* Style (apparence) */}
-      <div className="border-t border-line pt-4">
-        <p>Style</p>
-        <p className="text-sm text-ink-2">Choisis l’apparence de la bulle.</p>
-        <div
-          className="mt-3 flex flex-wrap gap-3"
-          role="group"
-          aria-label="Style de la bulle IA"
-          style={{ opacity: show ? 1 : 0.5 }}
-        >
-          {STYLE_LABELS.map((s) => {
-            const selected = style === s.key;
-            const d = PREVIEW_PX[size];
-            return (
-              <button
-                key={s.key}
-                type="button"
-                aria-pressed={selected}
-                aria-label={`Style ${s.label}`}
-                onClick={() => changeStyle(s.key)}
-                disabled={!show}
-                className="flex flex-col items-center gap-1.5 rounded-2xl px-3 py-2.5 transition-colors"
-                style={{
-                  cursor: show ? "pointer" : "default",
-                  border: "1px solid",
-                  borderColor: selected ? "var(--green)" : "var(--line)",
-                  background: selected ? "color-mix(in srgb, var(--green) 10%, transparent)" : "transparent",
-                }}
-              >
-                <span
-                  className="ai-orb ai-orb--sample"
-                  data-orb-style={s.key}
-                  aria-hidden
-                  style={{ width: d, height: d }}
+        <SettingRow title="Style" desc="L’apparence de la bulle." stack disabled={!show}>
+          <div
+            className="st-tiles"
+            role="radiogroup"
+            aria-label="Style de la bulle IA"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}
+          >
+            {STYLE_LABELS.map((s) => {
+              const d = PREVIEW_PX[size];
+              return (
+                <OptionTile
+                  key={s.key}
+                  selected={style === s.key}
+                  onSelect={() => changeStyle(s.key)}
+                  label={`Style ${s.label}`}
+                  disabled={!show}
+                  className="!items-center"
                 >
-                  <span className="ai-orb-dot" />
-                </span>
-                <span className="text-xs" style={{ color: selected ? "var(--green-ink)" : "var(--ink-2)" }}>
-                  {s.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                  <span className="grid place-items-center" style={{ height: 58 }} aria-hidden>
+                    <span className="ai-orb ai-orb--sample" data-orb-style={s.key} style={{ width: d, height: d }}>
+                      <span className="ai-orb-dot" />
+                    </span>
+                  </span>
+                  <span className="st-swatch-label">{s.label}</span>
+                </OptionTile>
+              );
+            })}
+          </div>
+        </SettingRow>
+      </SettingsGroup>
 
       <ConfirmDialog
         open={confirmHide}
@@ -195,6 +155,6 @@ export function AiOrbSettings() {
           changeShow(false);
         }}
       />
-    </div>
+    </>
   );
 }

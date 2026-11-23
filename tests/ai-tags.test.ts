@@ -9,15 +9,15 @@ import {
 } from "@/lib/ai/tags";
 import { buildSystemPrompt } from "@/lib/ai/persona";
 
-// Tests des 35 commandes « # » de l'assistant IA.
+// Tests des 37 commandes « # » de l'assistant IA (dont #court et #détaillé, Groupe A).
 // On teste la DÉTECTION (extractTags), la SUGGESTION (matchTags) et le
 // DÉCLENCHEMENT du comportement (buildSystemPrompt injecte la consigne du tag
 // dans le prompt système envoyé au modèle). L'appel au modèle lui-même n'est
 // pas testé ici : il dépend d'une clé API externe et consomme des crédits.
 
 describe("Catalogue des commandes", () => {
-  it("contient exactement 35 commandes", () => {
-    expect(AI_TAGS.length).toBe(35);
+  it("contient exactement 37 commandes", () => {
+    expect(AI_TAGS.length).toBe(37);
   });
 
   it("chaque commande a un id unique, un libellé, un emoji, une catégorie valide et une description", () => {
@@ -31,7 +31,7 @@ describe("Catalogue des commandes", () => {
       expect(t.desc.trim().length, `desc de ${t.id}`).toBeGreaterThan(10);
       expect(TAG_CATEGORIES, `catégorie de ${t.id}`).toContain(t.category);
     }
-    expect(ids.size).toBe(35);
+    expect(ids.size).toBe(37);
   });
 
   it("TAG_BY_ID retrouve chaque commande", () => {

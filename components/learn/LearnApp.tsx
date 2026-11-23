@@ -23,7 +23,9 @@ import {
   ChevronUp,
   Sparkles,
   BarChart3,
+  Leaf,
 } from "lucide-react";
+import Link from "next/link";
 import type { Deck, State } from "@/lib/learn/types";
 import { KIND_META } from "@/lib/learn/types";
 import {
@@ -40,8 +42,10 @@ import {
   levelFromXp,
   levelProgress,
   dailyProgress,
+  restToday,
   retentionStats,
 } from "@/lib/learn/progress";
+import { WEEKDAYS } from "@/lib/learn/rest";
 import {
   exportJSON,
   importJSON,
@@ -277,6 +281,9 @@ function Home({
   const prog = levelProgress(xp);
   const goal = ctx.s.settings.dailyGoal;
   const today = dailyProgress(ctx.s);
+  // Jour de repos choisi par l'élève : pas d'objectif imposé aujourd'hui.
+  const resting = restToday(ctx.s);
+  const restNames = ctx.s.settings.restDays.map((d) => WEEKDAYS[d].short.toLowerCase() + ".").join(", ");
   const dueAll = dueTotal(ctx.s);
   const rs = retentionStats(ctx.s);
   const [options, setOptions] = useState(false);
@@ -426,11 +433,24 @@ function Home({
           <div className="h-full rounded-full bg-[var(--green)]" style={{ width: `${Math.round(prog * 100)}%` }} />
         </div>
         <div className="mt-3 flex items-center justify-between text-sm">
-          <span className="text-ink-2">Objectif du jour</span>
-          <span className={today >= goal ? "text-green-ink font-semibold" : "text-ink-2"}>
-            {today} / {goal}
-            {today >= goal ? " ✓" : ""}
-          </span>
+          {resting ? (
+            <>
+              <span className="text-ink-2 inline-flex items-center gap-1.5">
+                <Leaf size={15} className="text-green-ink" aria-hidden /> Jour de repos
+              </span>
+              <span className={today > 0 ? "text-green-ink font-semibold" : "text-ink-3"}>
+                {today > 0 ? `+${today} en bonus` : "Pas d’objectif aujourd’hui"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-ink-2">Objectif du jour</span>
+              <span className={today >= goal ? "text-green-ink font-semibold" : "text-ink-2"}>
+                {today} / {goal}
+                {today >= goal ? " ✓" : ""}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -528,6 +548,14 @@ function Home({
                 <option key={g} value={g}>{g} cartes</option>
               ))}
             </select>
+          </div>
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="inline-flex items-center gap-1.5">
+              <Leaf size={15} className="text-green-ink" aria-hidden /> Jours de repos
+            </span>
+            <Link href="/settings?c=apprentissage" className="text-ink-2 underline underline-offset-2">
+              {restNames || "Aucun"} · Modifier
+            </Link>
           </div>
           <div className="flex flex-wrap gap-2">
             <button className="btn-ghost !py-1.5" onClick={exportAll}>

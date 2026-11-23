@@ -34,6 +34,8 @@ export interface Deck {
 
 export interface Settings {
   dailyGoal: number; // 10 | 20 | 30 | 50
+  /** Jours de repos : 0 = lundi … 6 = dimanche (voir lib/learn/rest). */
+  restDays: number[];
 }
 
 export interface Stats {

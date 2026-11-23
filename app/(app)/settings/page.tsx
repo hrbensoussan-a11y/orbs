@@ -1,253 +1,184 @@
-import type { ReactNode } from "react";
-import Link from "next/link";
+import { Suspense } from "react";
 import {
-  ArrowLeft,
-  Bell,
-  ChevronRight,
+  CreditCard,
   Database,
   Download,
-  Hash,
+  FileJson,
+  FileText,
   LogOut,
-  Palette,
-  Sparkles,
-  User,
+  ShieldCheck,
+  UserRound,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { updateSettings } from "@/app/actions/settings";
 import { logout } from "@/app/actions/auth";
-import { AppearanceButton } from "@/components/AppearanceButton";
-import { AppearanceExtras } from "@/components/appearance/AppearanceExtras";
+import { getBillingState } from "@/lib/billing/store";
+import { isProAccountEmail } from "@/lib/proAccess";
+import { displayName } from "@/lib/family";
+import { Avatar } from "@/components/avatar/Avatar";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { SettingsShell } from "@/components/settings/SettingsShell";
+import { SettingLink, SettingRow, SettingsGroup } from "@/components/settings/controls";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
+import { LearningSettings } from "@/components/settings/LearningSettings";
+import { AssistantSettings } from "@/components/settings/AssistantSettings";
+import { LearningProfileSettings } from "@/components/settings/LearningProfileSettings";
+import { toAiStyle } from "@/lib/ai/style";
+import { parseLearningProfile } from "@/lib/ai/learningProfile";
 import { AiOrbSettings } from "@/components/ai/AiOrbSettings";
 import { AiTagsSettings } from "@/components/ai/AiTagsSettings";
-import { NotificationSettings } from "@/components/agenda/NotificationSettings";
-import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import {
+  AgendaReminderSettings,
+  NotificationGeneralSettings,
+} from "@/components/agenda/NotificationSettings";
 
 export const dynamic = "force-dynamic";
 
-type ChipColor = "green" | "amber" | "coral" | "sky" | "lilac";
-
-/** En-tête de section : pastille d'icône pastel + titre + sous-titre. */
-function Section({
-  icon,
-  color,
-  title,
-  subtitle,
-  children,
-}: {
-  icon: ReactNode;
-  color: ChipColor;
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="card p-5">
-      <header className="flex items-center gap-3 mb-4">
-        <span className={`icon-chip ${color}`} aria-hidden>
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <h2 className="font-semibold leading-tight">{title}</h2>
-          {subtitle && (
-            <p className="text-sm text-ink-3 leading-snug">{subtitle}</p>
-          )}
-        </div>
-      </header>
-      {children}
-    </section>
-  );
-}
-
-/** Ligne de réglage : libellé + explication à gauche, contrôle à droite. */
-function Row({
-  title,
-  desc,
-  children,
-  divider,
-}: {
-  title: string;
-  desc?: string;
-  children: ReactNode;
-  divider?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between gap-4 ${
-        divider ? "border-t border-line pt-4 mt-4" : ""
-      }`}
-    >
-      <div className="min-w-0">
-        <p>{title}</p>
-        {desc && <p className="text-sm text-ink-2">{desc}</p>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const TEXT_SIZES = [
-  ["sm", "Petite"],
-  ["base", "Normale"],
-  ["lg", "Grande"],
-] as const;
+// Réglages d'Orbs : six catégories, une navigation intérieure (menu latéral
+// sur grand écran, liste iOS sur mobile) et une recherche. Chaque contrôle est
+// relié à un réglage réel ; rien n'est dupliqué du Centre de compte (/compte),
+// vers lequel la catégorie « Compte et données » renvoie.
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const settings = await prisma.settings.findUnique({
-    where: { userId: user.id },
-  });
-  const fontSize = settings?.fontSize ?? "base";
+  const [settings, billing] = await Promise.all([
+    prisma.settings.findUnique({
+      where: { userId: user.id },
+      select: { fontSize: true, aiStyle: true, learningProfile: true },
+    }),
+    getBillingState(user.id),
+  ]);
+  const pro = isProAccountEmail(user.email);
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || displayName(user);
+
+  const compte = (
+    <>
+      <SettingsGroup title="Mon compte">
+        <div className="st-row">
+          <div className="st-row-head">
+            <span className="st-account-avatar !w-14 !h-14" aria-hidden>
+              <Avatar config={user.avatar} size={56} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="st-row-title !text-[1.05rem] !font-semibold">{name}</p>
+              <p className="st-row-desc truncate">{pro ? "Compte professionnel (accès par code)" : user.email}</p>
+            </div>
+          </div>
+        </div>
+        <SettingLink
+          id="centre-compte"
+          href="/compte#profil"
+          icon={<UserRound size={17} />}
+          title="Profil"
+          desc="Nom, classe, établissement et avatar"
+        />
+        <SettingLink
+          href="/compte#securite"
+          icon={<ShieldCheck size={17} />}
+          title="Sécurité"
+          desc={pro ? "Accès par code professionnel" : "Mot de passe"}
+        />
+        <SettingLink
+          href="/compte#abonnement"
+          icon={<CreditCard size={17} />}
+          title="Abonnement et crédits"
+          desc={billing.hasPaidAccess ? "Ton offre et tes crédits IA" : "Découvrir Orbs Plus et Ultimate"}
+        />
+        <SettingLink
+          href="/compte#donnees"
+          icon={<Database size={17} />}
+          title="Mes données"
+          desc="Archive complète du compte, suppression"
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Journal"
+        footer="Ton journal t’appartient : l’export est libre et complet. C’est aussi ta sauvegarde, garde une copie en lieu sûr."
+      >
+        <SettingRow
+          id="export-journal"
+          icon={<Download size={17} />}
+          title="Exporter mon journal"
+          desc="Toutes tes pages, avec leurs humeurs et leurs tags."
+          stack
+        >
+          <div className="flex flex-wrap gap-2.5">
+            <a href="/api/export?format=json" className="btn-ghost" download>
+              <FileJson size={15} aria-hidden /> JSON
+            </a>
+            <a href="/api/export?format=md" className="btn-ghost" download>
+              <FileText size={15} aria-hidden /> Markdown
+            </a>
+          </div>
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup>
+        <SettingRow
+          id="deconnexion"
+          icon={<LogOut size={17} />}
+          title="Se déconnecter"
+          desc="Tes données restent sur ton compte."
+        >
+          <form action={logout}>
+            <ConfirmSubmit
+              className="btn-ghost"
+              tone="danger"
+              icon={<LogOut size={20} />}
+              title="Se déconnecter ?"
+              message={
+                pro
+                  ? "Tu te reconnecteras avec ton code professionnel. Tes données restent sur ton compte."
+                  : "Tu devras te reconnecter avec ton e-mail et ton mot de passe. Tes données restent sur ton compte."
+              }
+              confirmLabel="Oui, me déconnecter"
+              cancelLabel="Non, rester"
+            >
+              <span style={{ color: "var(--coral)" }}>Déconnexion</span>
+            </ConfirmSubmit>
+          </form>
+        </SettingRow>
+      </SettingsGroup>
+    </>
+  );
 
   return (
-    <div className="mx-auto max-w-xl px-4 pt-[calc(env(safe-area-inset-top,0px)+18px)] pb-10 flex flex-col gap-4">
-      {/* En-tête */}
-      <div className="flex items-center gap-3 mb-1">
-        <Link href="/accueil" className="btn-ghost !px-2.5" aria-label="Retour">
-          <ArrowLeft size={18} aria-hidden />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-semibold leading-tight">Réglages</h1>
-          <p className="text-sm text-ink-3">
-            Personnalise Orbs et gère ton compte.
-          </p>
-        </div>
-      </div>
-
-      {/* Apparence */}
-      <Section
-        icon={<Palette size={20} />}
-        color="green"
-        title="Apparence"
-        subtitle="Thème, fond, taille du texte et animations."
-      >
-        <Row
-          title="Thème & fond"
-          desc="Clair, anti-lumière bleue, sombre, luminosité, fonds."
-        >
-          <AppearanceButton variant="row" />
-        </Row>
-
-        {/* Taille du texte — contrôle segmenté + enregistrement */}
-        <form action={updateSettings} className="border-t border-line pt-4 mt-4">
-          <div className="flex items-center justify-between gap-4 mb-3">
-            <div className="min-w-0">
-              <p>Taille du texte</p>
-              <p className="text-sm text-ink-2">Pour lire plus confortablement.</p>
-            </div>
-            <button type="submit" className="btn-primary flex-none">
-              Enregistrer
-            </button>
-          </div>
-          <div className="seg" role="radiogroup" aria-label="Taille du texte">
-            {TEXT_SIZES.map(([value, label]) => (
-              <label key={value}>
-                <input
-                  type="radio"
-                  name="fontSize"
-                  value={value}
-                  defaultChecked={fontSize === value}
+    <div className="st-page">
+      {/* useSearchParams (catégorie ouverte) : rendu client sous Suspense. */}
+      <Suspense>
+        <SettingsShell
+          account={{
+            name,
+            email: pro ? "Compte professionnel" : user.email,
+            avatar: <Avatar config={user.avatar} size={52} />,
+          }}
+          sections={{
+            apparence: <AppearanceSettings initialFontSize={settings?.fontSize ?? "base"} />,
+            notifications: <NotificationGeneralSettings />,
+            agenda: <AgendaReminderSettings />,
+            apprentissage: <LearningSettings />,
+            assistant: (
+              <>
+                <AssistantSettings
+                  hasPaidAccess={billing.hasPaidAccess}
+                  initialStyle={toAiStyle(settings?.aiStyle)}
                 />
-                {label}
-              </label>
-            ))}
-          </div>
-        </form>
-
-        {/* Réduire les animations + réinitialiser l'apparence */}
-        <div className="border-t border-line pt-4 mt-4">
-          <AppearanceExtras />
-        </div>
-      </Section>
-
-      {/* Notifications — rappels sonores de l'agenda */}
-      <Section
-        icon={<Bell size={20} />}
-        color="amber"
-        title="Notifications"
-        subtitle="Un rappel sonore quand un cours ou des devoirs approchent."
-      >
-        <p className="text-sm text-ink-2 mb-4">
-          Choisis ta sonnerie et le moment où être prévenu·e.
-        </p>
-        <NotificationSettings />
-      </Section>
-
-      {/* Assistant IA — la bulle */}
-      <Section
-        icon={<Sparkles size={20} />}
-        color="lilac"
-        title="Assistant IA"
-        subtitle="Le petit rond qui ouvre l’assistant sur toutes les pages."
-      >
-        <AiOrbSettings />
-      </Section>
-
-      {/* Commandes de l'IA */}
-      <Section
-        icon={<Hash size={20} />}
-        color="sky"
-        title="Commandes de l’IA"
-        subtitle="Des raccourcis à taper dans le chat."
-      >
-        <p className="text-sm text-ink-2 mb-4">
-          Dans le chat, tape <span className="text-ink">#</span> pour donner un
-          contexte ou un mode à l’assistant (par ex.{" "}
-          <span className="text-ink">#réviser</span>,{" "}
-          <span className="text-ink">#agenda</span>).
-        </p>
-        <AiTagsSettings />
-      </Section>
-
-      {/* Données */}
-      <Section
-        icon={<Database size={20} />}
-        color="coral"
-        title="Tes données"
-        subtitle="Ton journal t’appartient."
-      >
-        <p className="text-sm text-ink-2 mb-4">
-          L’export est libre et complet — c’est aussi ta sauvegarde. Garde une
-          copie en lieu sûr.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <a href="/api/export?format=json" className="btn-ghost" download>
-            <Download size={16} aria-hidden /> Exporter en JSON
-          </a>
-          <a href="/api/export?format=md" className="btn-ghost" download>
-            <Download size={16} aria-hidden /> Exporter en Markdown
-          </a>
-        </div>
-      </Section>
-
-      {/* Compte */}
-      <Section
-        icon={<User size={20} />}
-        color="green"
-        title="Compte"
-        subtitle={`Connecté·e en tant que ${user.email}.`}
-      >
-        <Link href="/compte" className="btn-ghost w-full justify-between">
-          <span className="inline-flex items-center gap-2">
-            <User size={16} aria-hidden /> Gérer mon profil
-          </span>
-          <ChevronRight size={16} aria-hidden />
-        </Link>
-
-        <form action={logout} className="mt-3">
-          <ConfirmSubmit
-            className="btn-ghost"
-            tone="danger"
-            icon={<LogOut size={20} />}
-            title="Se déconnecter ?"
-            message="Tu devras te reconnecter avec ton e-mail et ton mot de passe. Tes données restent sur ton compte."
-            confirmLabel="Oui, me déconnecter"
-            cancelLabel="Non, rester"
-          >
-            <LogOut size={16} aria-hidden /> Se déconnecter
-          </ConfirmSubmit>
-        </form>
-      </Section>
+                <LearningProfileSettings
+                  initial={{
+                    schoolClass: user.schoolClass ?? "",
+                    profile: parseLearningProfile(settings?.learningProfile),
+                  }}
+                  firstName={(user.firstName || "").trim() || null}
+                />
+                <AiOrbSettings />
+                <AiTagsSettings />
+              </>
+            ),
+            compte,
+          }}
+        />
+      </Suspense>
     </div>
   );
 }

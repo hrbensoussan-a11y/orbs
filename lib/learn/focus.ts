@@ -28,6 +28,20 @@ export interface FocusState {
 const KEY = "orbs.focus";
 export const FOCUS_EVENT = "orbs:focus"; // l'état a changé (même onglet)
 export const FOCUS_OPEN_EVENT = "orbs:focus:open"; // demande d'ouvrir la fenêtre
+/**
+ * Demande de changer les durées (Réglages → Apprentissage). Le minuteur,
+ * monté en permanence dans le layout, les applique lui-même : son état en
+ * mémoire et le stockage restent ainsi alignés. Détail : { workMin, breakMin }.
+ */
+export const FOCUS_TIMES_EVENT = "orbs:focus:times";
+export type FocusTimes = { workMin: number; breakMin: number };
+
+/** Préréglages proposés (fenêtre du minuteur et Réglages). */
+export const FOCUS_PRESETS: readonly [number, number][] = [
+  [25, 5],
+  [50, 10],
+  [15, 3],
+];
 
 const clampMin = (v: number, max: number, def: number) =>
   Number.isFinite(v) && v >= 1 ? Math.min(max, Math.round(v)) : def;

@@ -3,24 +3,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Palette, X } from "lucide-react";
 import {
+  BACKGROUNDS as BGS,
+  THEMES,
   applyAppearance as apply,
   readAppearance as read,
   saveAppearance,
   type Appearance,
 } from "@/lib/appearance";
-
-const THEMES: [string, string][] = [
-  ["light", "Clair"],
-  ["warm", "Anti-lumière bleue"],
-  ["dark", "Sombre"],
-];
-const BGS: [string, string, string][] = [
-  ["rainbow", "Arc-en-ciel", "linear-gradient(135deg,#ffe1ce,#e7d3ff,#cff3df,#d5e7ff)"],
-  ["mint", "Menthe", "linear-gradient(135deg,#d7f5e3,#bff0d6,#dcf3ea)"],
-  ["sunset", "Coucher de soleil", "linear-gradient(135deg,#ffe0c9,#ffd9e0,#ffe9c7)"],
-  ["ocean", "Océan", "linear-gradient(135deg,#cfe6ff,#d2f0f4,#dbe7ff)"],
-  ["plain", "Uni", "linear-gradient(135deg,#eef1f5,#eef2f7)"],
-];
 
 export function AppearanceButton({ variant = "icon" }: { variant?: "icon" | "row" }) {
   const [open, setOpen] = useState(false);

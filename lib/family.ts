@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "./prisma";
 import type { LearnSummary } from "./learn/summary";
 import { levelFromXp, levelProgress } from "./learn/progress";
+import { isStreakAlive, sanitizeRestDays } from "./learn/rest";
 
 // ------- Résumé Apprendre -------
 
@@ -28,6 +29,8 @@ const SummarySchema = z.object({
       }),
     )
     .max(500),
+  // Absent des résumés envoyés avant les jours de repos : facultatif.
+  restDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
 });
 
 export function validateSummary(raw: unknown): LearnSummary | null {
@@ -59,11 +62,12 @@ export function daysAgo(n: number): Date {
   return new Date(Date.now() - n * 86_400_000);
 }
 
-/** Série « vivante » : retombe à 0 si l'élève n'a rien fait hier ni aujourd'hui. */
-export function liveStreak(s: LearnSummary): number {
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  return s.lastDay === dayKey() || s.lastDay === dayKey(y) ? s.streak : 0;
+/**
+ * Série « vivante » : retombe à 0 si l'élève n'a rien fait hier ni
+ * aujourd'hui — sauf si les jours manqués sont ses jours de repos.
+ */
+export function liveStreak(s: LearnSummary, now: Date = new Date()): number {
+  return isStreakAlive(s.lastDay, now, sanitizeRestDays(s.restDays)) ? s.streak : 0;
 }
 
 export function levelInfo(s: LearnSummary) {

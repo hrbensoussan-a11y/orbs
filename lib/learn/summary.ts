@@ -14,6 +14,8 @@ export type LearnSummary = {
   mastered: number;
   badges: string[];
   days: Record<string, number>; // 60 derniers jours : AAAA-MM-JJ -> actions
+  /** Jours de repos de l'élève (série « vivante » côté famille). */
+  restDays?: number[];
   decks: { name: string; subject: string; cards: number; mastered: number }[];
 };
 
@@ -43,5 +45,6 @@ export function summarize(state: State): LearnSummary {
     badges: state.stats.badges,
     days,
     decks,
+    restDays: [...state.settings.restDays],
   };
 }

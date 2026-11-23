@@ -25,6 +25,25 @@ export type Appearance = { theme: string; bg: string; dim: number };
 
 export const DEFAULT_APPEARANCE: Appearance = { theme: "light", bg: "rainbow", dim: 0 };
 
+/** Thèmes proposés (fenêtre Apparence de l'accueil et Réglages). */
+export const THEMES: [string, string][] = [
+  ["light", "Clair"],
+  ["warm", "Anti-lumière bleue"],
+  ["dark", "Sombre"],
+];
+
+/** Fonds proposés : identifiant, nom, aperçu. */
+export const BACKGROUNDS: [string, string, string][] = [
+  ["rainbow", "Arc-en-ciel", "linear-gradient(135deg,#ffe1ce,#e7d3ff,#cff3df,#d5e7ff)"],
+  ["mint", "Menthe", "linear-gradient(135deg,#d7f5e3,#bff0d6,#dcf3ea)"],
+  ["sunset", "Coucher de soleil", "linear-gradient(135deg,#ffe0c9,#ffd9e0,#ffe9c7)"],
+  ["ocean", "Océan", "linear-gradient(135deg,#cfe6ff,#d2f0f4,#dbe7ff)"],
+  ["plain", "Uni", "linear-gradient(135deg,#eef1f5,#eef2f7)"],
+];
+
+/** Événement émis quand l'apparence change (deux écrans peuvent la modifier). */
+export const APPEARANCE_EVENT = "orbs:appearance";
+
 /** Réglages mémorisés du compte actif (valeurs par défaut sinon). */
 export function readAppearance(): Appearance {
   try {
@@ -44,6 +63,11 @@ export function saveAppearance(a: Appearance): void {
     writeUserItem(APPEARANCE_KEY, JSON.stringify(a));
   } catch {
     /* quota / mode privé */
+  }
+  try {
+    window.dispatchEvent(new Event(APPEARANCE_EVENT));
+  } catch {
+    /* hors navigateur */
   }
 }
 

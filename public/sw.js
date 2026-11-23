@@ -121,3 +121,47 @@ self.addEventListener("fetch", (event) => {
       }),
   );
 });
+
+// Toucher une notification d'Orbs (rappels de l'agenda, lib/agenda/notifications) :
+// on revient sur un onglet d'Orbs déjà ouvert et on lui demande d'afficher la
+// vue liée (ex. le récapitulatif de demain) ; sans onglet ouvert, on ouvre
+// Orbs directement sur cette vue. Aucune donnée n'est lue ni mise en cache ici.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const open = typeof data.open === "string" ? data.open : null;
+  // Uniquement une page d'Orbs (même origine) : jamais d'adresse extérieure,
+  // même déguisée (« //site », « /\\site »…).
+  let url = "/accueil";
+  try {
+    if (typeof data.url === "string") {
+      const target = new URL(data.url, self.location.origin);
+      if (target.origin === self.location.origin) url = target.pathname + target.search;
+    }
+  } catch {
+    url = "/accueil";
+  }
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const mine = windows.filter((c) => {
+        try {
+          return new URL(c.url).origin === self.location.origin;
+        } catch {
+          return false;
+        }
+      });
+      const target = mine.find((c) => c.focused) || mine[0];
+      if (target) {
+        try {
+          await target.focus();
+        } catch {
+          /* le navigateur peut refuser le focus : le message suffit */
+        }
+        if (open) target.postMessage({ type: "orbs:notification-open", open });
+        return;
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});

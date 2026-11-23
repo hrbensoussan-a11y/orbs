@@ -308,6 +308,11 @@ model Settings {
   pinLockEnabled Boolean @default(false)
   pinHash        String?
 
+  // Assistant IA (Réglages → Assistant IA). Lus par /api/ai/chat côté
+  // serveur : le navigateur n'envoie jamais ces préférences avec la question.
+  aiStyle         String  @default("balanced") // "guide" | "balanced" | "direct" (lib/ai/style.ts)
+  learningProfile String? // JSON facultatif, validé (lib/ai/learningProfile.ts) ; null = profil vide
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

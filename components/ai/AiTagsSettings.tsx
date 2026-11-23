@@ -18,6 +18,7 @@ import {
   loadTagPrefs,
   saveTagPrefs,
 } from "@/lib/ai/tags";
+import { Segmented, SettingRow, SettingsGroup } from "@/components/settings/controls";
 
 export function AiTagsSettings() {
   const [trigger, setTrigger] = useState<Trigger>("#");
@@ -51,107 +52,101 @@ export function AiTagsSettings() {
           !q ||
           normalizeTag(t.id).includes(q) ||
           normalizeTag(t.label).includes(q) ||
-          normalizeTag(t.desc).includes(q),
+          normalizeTag(t.desc).includes(q) ||
+          normalizeTag(t.category).includes(q),
       ),
     [q],
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Déclencheur */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p>Symbole de commande</p>
-          <p className="text-sm text-ink-2">Tape ce symbole dans le chat pour ouvrir les commandes.</p>
-        </div>
-        <div className="flex gap-1.5" role="group" aria-label="Symbole de commande">
-          {TRIGGERS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={trigger === t}
-              onClick={() => changeTrigger(t)}
-              className="h-10 w-10 rounded-xl font-semibold text-lg"
-              style={
-                trigger === t
-                  ? { background: "color-mix(in srgb, var(--green) 16%, transparent)", color: "var(--green-ink)", boxShadow: "inset 0 0 0 1px var(--green)" }
-                  : { background: "var(--fill-2)", color: "var(--ink-2)" }
-              }
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+    <SettingsGroup
+      title="Commandes"
+      footer={
+        <>
+          Dans le chat, tape <strong className="text-ink">{trigger}</strong> pour donner un contexte
+          ou un mode à l’assistant (par ex. {trigger}réviser, {trigger}agenda). {trigger}court et{" "}
+          {trigger}détaillé règlent la longueur d’une seule réponse.
+        </>
+      }
+    >
+      <SettingRow
+        id="commandes"
+        title="Symbole de commande"
+        desc="Ce que tu tapes dans le chat pour ouvrir les commandes."
+      >
+        <Segmented
+          value={trigger}
+          options={TRIGGERS.map((t) => ({ value: t, label: <span className="font-semibold text-base px-1">{t}</span> }))}
+          onChange={changeTrigger}
+          label="Symbole de commande"
+        />
+      </SettingRow>
 
-      {/* Bouton : afficher / masquer toutes les commandes */}
-      <div className="border-t border-line pt-4">
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          aria-expanded={showAll}
-          className="btn-ghost w-full justify-between"
-        >
-          <span>{showAll ? "Masquer les commandes" : `Voir toutes les commandes (${AI_TAGS.length})`}</span>
-          {showAll ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+      <SettingRow
+        title={`Toutes les commandes (${AI_TAGS.length})`}
+        desc={
+          favorites.length > 0
+            ? `${favorites.length} en favori${favorites.length > 1 ? "s" : ""} : proposée${favorites.length > 1 ? "s" : ""} en premier.`
+            : "Mets tes préférées en favori : elles seront proposées en premier."
+        }
+      >
+        <button type="button" onClick={() => setShowAll((v) => !v)} aria-expanded={showAll} className="btn-ghost">
+          {showAll ? "Masquer" : "Afficher"}
+          {showAll ? <ChevronUp size={15} aria-hidden /> : <ChevronDown size={15} aria-hidden />}
         </button>
-      </div>
+      </SettingRow>
 
       {showAll && (
-        <>
-          {/* Recherche */}
-          <div className="relative">
-            <Search size={16} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+        <div className="st-row">
+          <div className="relative mb-3">
+            <Search size={16} aria-hidden className="st-search-icon" />
             <input
-              className="input !pl-9"
+              className="st-search-input !h-10"
               placeholder="Chercher une commande…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               aria-label="Chercher une commande"
             />
           </div>
-          <p className="text-xs text-ink-3 -mt-2">
-            ★ Mets une commande en favori : elle sera proposée en premier. {favorites.length > 0 && `(${favorites.length} favori${favorites.length > 1 ? "s" : ""})`}
-          </p>
 
-          {/* Liste groupée par catégorie */}
           {TAG_CATEGORIES.map((cat) => {
-        const items = filtered.filter((t) => t.category === cat);
-        if (!items.length) return null;
-        return (
-          <div key={cat}>
-            <h3 className="text-sm font-semibold text-ink-2 mb-1.5">{cat}</h3>
-            <div className="flex flex-col">
-              {items.map((t) => {
-                const fav = favorites.includes(t.id);
-                return (
-                  <div key={t.id} className="flex items-start gap-2.5 py-2 border-t border-line first:border-t-0">
-                    <span className="text-lg leading-6" aria-hidden>{t.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium">
-                        <span className="text-ink-3">{trigger}</span>{t.id}
-                      </p>
-                      <p className="text-xs text-ink-3">{t.desc}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => toggleFav(t.id)}
-                      aria-pressed={fav}
-                      aria-label={fav ? `Retirer ${t.label} des favoris` : `Mettre ${t.label} en favori`}
-                      className="flex-none p-1.5 rounded-lg"
-                      style={{ color: fav ? "var(--amber)" : "var(--ink-3)" }}
-                    >
-                      <Star size={18} fill={fav ? "currentColor" : "none"} aria-hidden />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
+            const items = filtered.filter((t) => t.category === cat);
+            if (!items.length) return null;
+            return (
+              <div key={cat} className="mt-3 first:mt-0">
+                <h4 className="st-group-title !ml-0 !mb-1">{cat}</h4>
+                <div className="flex flex-col">
+                  {items.map((t) => {
+                    const fav = favorites.includes(t.id);
+                    return (
+                      <div key={t.id} className="flex items-start gap-2.5 py-2 [&+&]:border-t" style={{ borderColor: "var(--st-hair)" }}>
+                        <span className="text-lg leading-6" aria-hidden>{t.emoji}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">
+                            <span style={{ color: "var(--st-desc)" }}>{trigger}</span>{t.id}
+                          </p>
+                          <p className="text-xs" style={{ color: "var(--st-desc)" }}>{t.desc}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleFav(t.id)}
+                          aria-pressed={fav}
+                          aria-label={fav ? `Retirer ${t.label} des favoris` : `Mettre ${t.label} en favori`}
+                          className="flex-none p-1.5 rounded-lg"
+                          style={{ color: fav ? "var(--amber)" : "var(--ink-3)" }}
+                        >
+                          <Star size={18} fill={fav ? "currentColor" : "none"} aria-hidden />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
           })}
-        </>
+          {filtered.length === 0 && <p className="text-sm text-center py-3" style={{ color: "var(--st-desc)" }}>Aucune commande trouvée.</p>}
+        </div>
       )}
-    </div>
+    </SettingsGroup>
   );
 }
